@@ -4,6 +4,8 @@
 
 **值班运维的只读 MCP** — 夜莺告警 · Jenkins 发版 · PostgreSQL 排障
 
+<p><b>简体中文</b> · <a href="README.en.md">English</a></p>
+
 在 Cursor 里用自然语言查，不必在监控台、Jenkins 和控制台之间来回切。  
 进程跑在**你的电脑**上，直连已有系统。凭据留在本机，仓库里没有 Token、没有密码、没有真实主机名。
 
@@ -17,14 +19,14 @@
 <p>
   <b><a href="#快速开始">快速开始</a></b> ·
   <a href="#它做什么">它做什么</a> ·
+  <a href="#为什么是夜莺而不是-prometheus--elasticsearch">为什么是夜莺</a> ·
   <a href="#怎么工作">怎么工作</a> ·
   <a href="#三个服务">三个服务</a> ·
   <a href="#安全模型">安全</a> ·
+  <a href="#测试阶段与免责">测试与免责</a> ·
   <a href="#什么时候用--什么时候不用">适用边界</a> ·
   <a href="#文档">文档</a>
 </p>
-
-<sub>English: Read-only stdio MCP servers for <a href="https://github.com/ccfos/nightingale">Nightingale</a>, Jenkins, and PostgreSQL. Credentials stay on the laptop. Generic examples only.</sub>
 
 </div>
 
@@ -40,13 +42,25 @@
 
 ## 它做什么
 
-- **夜莺 MCP** — 16 个只读工具：活跃/历史告警、规则、主机、PromQL、Loki / Elasticsearch / OpenSearch 日志。
+- **夜莺 MCP** — 基于 [n9e 官方开源 MCP](https://github.com/n9e/n9e-mcp-server) 二次开发：只留 stdio 与 6 个只读 toolset（16 个工具），查活跃/历史告警、规则、主机、PromQL、Loki / Elasticsearch / OpenSearch 日志。去掉上游的 HTTP 模式、写工具、用户/看板/屏蔽等未使用包。
 - **Jenkins MCP** — 18 个只读工具：Job、失败构建、Pipeline stage、控制台尾部与搜索、队列、节点。不触发、不停止、不跑 Groovy。
 - **PostgreSQL MCP** — 19 个只读工具：一个进程、多实例 `target` 清单；会话/锁/统计/复制 + 一条受控 `SELECT` 逃生口。库变多只改本机 JSON，不增加 Tool。
 - **Cursor Skill + Rule** — 仓库自带查询技能和硬性只读约定，换一个值班的人，Agent 也不会把所有工具打一遍。
 - **本机实验室** — `lab/postgres` 用 Docker 拉起一次性 PostgreSQL，按清单验收 19 个工具和 SQL 护栏。
 
 不是 MCP Hub，不是再部署一套 HTTP 网关，也不是 CMDB。高频问题有专用 Tool；PostgreSQL 用 guard 过的 `query_postgres`，而不是为每个系统视图再造一个接口。
+
+## 为什么是夜莺，而不是 Prometheus / Elasticsearch
+
+值班要看的往往不是「某一个 Prometheus」或「某一个 Elasticsearch」，而是**已经对齐过的告警、指标、日志**：这条规则打在哪台机器上、PromQL 是什么、同一时刻日志里有没有对应错误。夜莺本身就是这块的汇聚层——告警在它上面，PromQL 在它上面查，Loki / Elasticsearch / OpenSearch 也可以作为数据源接进去。
+
+所以这里做的是**夜莺 MCP**，不是再给 Prometheus、Elasticsearch、Loki、VictoriaMetrics 各写一套 MCP：
+
+- 根上每接一种存储就多一个进程、一套鉴权、一套字段方言；Agent 还要自己把告警 ID、指标标签、日志索引对上。夜莺已经做过这层对齐。
+- 新数据源优先在**夜莺里接入**（Prometheus、VictoriaMetrics、Elasticsearch、Loki、OpenSearch 等，夜莺支持的种类很多）。接好之后，本 MCP 仍走同一套只读工具：告警、主机、数据源列表、`query_instant` / `query_range`、`query_logs`。不必为每种后端再开一个 MCP。
+- MCP 只调夜莺 API，不直连底层库。Token 是夜莺用户 Token，能看到的业务组和数据源范围跟这个账号在夜莺里的授权一致。
+
+Jenkins、PostgreSQL 没有等价的「值班汇聚台」，所以另外两套 MCP 才直连平台本身。监控侧已经有夜莺，就不要在根上再堆一套。
 
 ## 怎么工作
 
@@ -113,7 +127,7 @@ go build -o postgres-mcp-server/postgres-mcp-server.exe ./postgres-mcp-server/
 | 典型顺序 | 告警列表 → 详情 → 复用 PromQL / 日志 body | `list_jobs` → 构建 → stage → 搜 Console | `list_targets` → 专用诊断 → 不够再用 `query_postgres` |
 | Skill | [nightingale](.cursor/skills/nightingale/SKILL.md) | [jenkins](.cursor/skills/jenkins/SKILL.md) | [postgres](.cursor/skills/postgres/SKILL.md) |
 
-源码从上游裁过：夜莺只留只读 toolset；Jenkins 去掉触发/停止/Groovy/整包控制台路径（控制台默认最后 500 行、最多 2000 行）。
+夜莺 MCP 基于 [n9e/n9e-mcp-server](https://github.com/n9e/n9e-mcp-server)（Flashcat Nightingale 官方开源 MCP）二次开发，只留只读 toolset。Jenkins 从 [jenkins-mcp-go](https://github.com/2001adarsh/jenkins-mcp-go) 裁过，去掉触发/停止/Groovy/整包控制台路径（控制台默认最后 500 行、最多 2000 行）。许可证与上游说明见 [NOTICE](NOTICE)。
 
 Skill 里的 Job 名、库名、索引名都是**虚构示例**（`team/prod/checkout-api`、`orders-prod`、`app-logs-*`）。接到你们环境后用 `list_*` 发现，不要猜 ID。
 
@@ -138,6 +152,20 @@ PostgreSQL 额外约束：
 
 Agent 不得声称已经重跑构建、屏蔽告警、杀掉会话或改过数据。规则见 [`.cursor/rules/devops-mcp.mdc`](.cursor/rules/devops-mcp.mdc)。
 
+## 测试阶段与免责
+
+本仓库尚在**测试阶段**：接口、工具范围、Skill、默认只读边界都可能改。按 [Apache License 2.0](LICENSE) 以「按现状」提供，**不构成对任何生产环境的承诺或担保**。
+
+你自行编译、配置、接入真实夜莺 / Jenkins / PostgreSQL 之后，因误用、凭据配错、Agent 幻觉、上游 API 变更、网络或平台故障导致的查询失败、误判、数据泄露或业务影响，**由使用者自行承担，与作者及贡献者无关**。上生产前请用只读账号、在你们自己的环境做验收；出了问题先查本机 `mcp.json`、平台权限和上游服务，而不是默认是本仓库的锅。
+
+本发行版**默认不注册写工具**。若你基于本仓库或上游再做二次开发、把写操作加回去（改告警规则、屏蔽、触发构建、跑 Groovy、`VACUUM`、杀会话等）：
+
+- 必须自己设计**最小权限**（独立账号、只开需要的角色，不要用超管 Token）
+- 必须自己接**审批与审计**（谁在何时通过 Agent 改了什么，要能追到人）
+- 必须自己评估 Agent 误调用写工具的后果；写坏生产是你的变更，不是本仓库默认行为
+
+不要把「仓库里能编过」理解成「可以放心写生产」。需要变更时走你们现有的变更流程，而不是把写权限交给 MCP。
+
 ## 什么时候用 · 什么时候不用
 
 **适合**：夜莺 + Jenkins + PostgreSQL 已经在跑；值班要用自然语言把「告警 / 红构建 / 锁等待」串起来；希望 Agent **查得了、动不了** 生产。
@@ -159,13 +187,15 @@ Agent 不得声称已经重跑构建、屏蔽告警、杀掉会话或改过数�
 ## 仓库布局
 
 ```text
-n9e-mcp-server/          夜莺只读 MCP（裁自 n9e 官方 MCP）
+n9e-mcp-server/          夜莺只读 MCP（基于 n9e 官方开源 MCP 二开）
 jenkins-mcp-server/      Jenkins 只读 MCP（裁自 jenkins-mcp-go，MIT）
 postgres-mcp-server/     PostgreSQL 多 target 只读 MCP
 lab/postgres/            本机 Docker 实验室 + 验收清单
 examples/                脱敏后的 mcp.json 样例
 .cursor/skills/          给 Agent 的查询技能
 .cursor/rules/           只读与脱敏硬性约定
+README.md                中文（GitHub 默认）
+README.en.md             English
 ```
 
 各服务 README 写清：作用、如何拿凭据、工具范围、构建、Cursor 配置。上游宣传材料、Docker 镜像、真实环境配置不进本仓库。
@@ -179,7 +209,7 @@ cd ../jenkins-mcp-server && go test ./...
 cd ../postgres-mcp-server && go test ./...
 ```
 
-欢迎 Issue / PR：新的只读诊断 Tool、更清楚的 Skill、跨平台文档。请不要提交生产 Token、密码、内网 IP、真实 Job 名或客户库名。`lab/` 里标明仅用于一次性 Docker 的口令可以保留。改行为后同步更新对应 README 与 Skill。
+欢迎 Issue / PR：新的只读诊断 Tool、更清楚的 Skill、跨平台文档。请不要提交生产 Token、密码、内网 IP、真实 Job 名或客户库名。`lab/` 里标明仅用于一次性 Docker 的口令可以保留。改行为后同步更新对应 README 与 Skill。根目录改说明时同时改 [README.md](README.md)（中文，默认）和 [README.en.md](README.en.md)（英文）。
 
 ## 许可证
 

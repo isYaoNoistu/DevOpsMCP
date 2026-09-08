@@ -2,7 +2,9 @@
 
 本机 stdio MCP，用来查夜莺（Nightingale / n9e）的告警、主机、数据源、PromQL 指标和日志。进程跑在开发机，直连夜莺 API。
 
-源码从上游裁过：只留这 6 个只读 toolset，去掉 HTTP 模式、写工具、用户/看板/屏蔽等未使用包。
+基于 [n9e 官方开源 MCP](https://github.com/n9e/n9e-mcp-server) 二次开发（上游自称 *Nightingale's official MCP Server*）。本树只留 stdio 入口和这 6 个只读 toolset，去掉 HTTP 模式、写工具、用户/看板/屏蔽等未使用包。夜莺产品本身见 [ccfos/nightingale](https://github.com/ccfos/nightingale)。许可证与上游说明见仓库根目录 [NOTICE](../NOTICE)。
+
+不做 Prometheus / Elasticsearch 专用 MCP：夜莺已经能同时看告警、指标和日志，把对应数据源接到夜莺即可，本进程只调夜莺 API。理由见根 README [为什么是夜莺](../README.md#为什么是夜莺而不是-prometheus--elasticsearch)。尚在测试阶段，使用风险与写操作二开注意见 [测试阶段与免责](../README.md#测试阶段与免责)。
 
 ## 默认范围
 
