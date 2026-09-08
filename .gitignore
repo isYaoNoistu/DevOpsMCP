@@ -1,0 +1,9 @@
+*.exe
+*.exe~
+.mcp.json
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+lab/postgres/.env

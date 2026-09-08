@@ -1,0 +1,10 @@
+interface:
+  display_name: "Nightingale 查询"
+  short_description: "高效查询夜莺告警、监控目标、PromQL 指标与日志数据"
+  default_prompt: "使用 $nightingale 调查当前夜莺告警并关联分析指标和日志。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "nightingale"
+      description: "Read-only Nightingale monitoring data tools"

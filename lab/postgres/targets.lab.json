@@ -1,0 +1,17 @@
+{
+  "targets": [
+    {
+      "name": "mcp-lab-local",
+      "aliases": ["本地测试库", "mcp lab", "local postgres"],
+      "description": "本机 Docker PostgreSQL，仅用于 MCP 排障演练",
+      "environment": "dev",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "dbname": "mcp_lab",
+      "user": "mcp_ro",
+      "sslmode": "disable",
+      "credential_ref": "postgres/mcp-lab-local",
+      "tags": ["local", "lab"]
+    }
+  ]
+}

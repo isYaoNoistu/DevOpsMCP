@@ -1,0 +1,16 @@
+---
+description: DevOpsMCP 只读约定：查监控/发版/数据库时不写、不谎称已修复
+alwaysApply: true
+---
+
+# 只读排障
+
+本仓库提供夜莺、Jenkins、PostgreSQL 的 **stdio 只读 MCP**。Agent 默认只查询。
+
+- 未在当前对话被明确要求「对夜莺 / Jenkins / PostgreSQL 做写操作」之前，不要调用任何写工具，也不要建议用户把只读账号改成可写。
+- 即使工具列表里出现 `trigger_build`、`create_*`、`execute_sql`、`VACUUM`、`pg_terminate_backend`，也不要调用。本仓库二进制默认不注册它们。
+- 不要声称已经重跑构建、屏蔽告警、杀掉会话、drop slot 或改过数据。
+- 回复先给结论和可核对证据（ID、构建号、pid），不要整包粘贴 Console、时序或表统计。
+- Token、密码、`.env`、数据源鉴权字段不要写入仓库，也不要原样贴进回复。
+
+查询前先读对应 Skill：`.cursor/skills/nightingale/SKILL.md`、`.cursor/skills/jenkins/SKILL.md`、`.cursor/skills/postgres/SKILL.md`。

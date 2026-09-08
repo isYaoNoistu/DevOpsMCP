@@ -1,0 +1,10 @@
+interface:
+  display_name: "PostgreSQL 查询"
+  short_description: "查询本机清单中的 PostgreSQL：会话、锁、统计、复制与只读 SQL"
+  default_prompt: "使用 $postgres 解析 target 后只读排查数据库问题，先专用 Tool，不够再用 query_postgres。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "postgres"
+      description: "Read-only PostgreSQL diagnosis tools"

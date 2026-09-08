@@ -1,0 +1,3 @@
+# hostname:port:database:username:password
+# 仅用于 lab/postgres 一次性 Docker。不要把生产口令写进这个文件后提交。
+127.0.0.1:5432:mcp_lab:mcp_ro:mcp-lab-readonly

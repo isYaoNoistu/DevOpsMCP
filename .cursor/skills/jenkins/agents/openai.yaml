@@ -1,0 +1,10 @@
+interface:
+  display_name: "Jenkins 查询"
+  short_description: "查询 Jenkins Job、构建、Pipeline stage 与控制台，用于发版排障"
+  default_prompt: "使用 $jenkins 调查最近一次发版/流水线失败，定位失败 stage 和控制台错误。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "jenkins"
+      description: "Read-only Jenkins CI/CD diagnosis tools"

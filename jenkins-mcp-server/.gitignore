@@ -1,0 +1,5 @@
+/jenkins-mcp-server
+/jenkins-mcp-server.exe
+/*.exe
+/*.exe~
+.mcp.json

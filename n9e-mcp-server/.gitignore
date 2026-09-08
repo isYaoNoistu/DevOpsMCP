@@ -1,0 +1,5 @@
+/n9e-mcp-server
+/n9e-mcp-server.exe
+/*.exe
+/*.exe~
+.mcp.json

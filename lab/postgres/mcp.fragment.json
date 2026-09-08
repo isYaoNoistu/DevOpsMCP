@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
+      "args": [],
+      "env": {
+        "PG_TARGETS_FILE": "/ABS/PATH/.cursor/postgres-targets.lab.json",
+        "PG_MCP_READ_ONLY": "true"
+      }
+    }
+  }
+}

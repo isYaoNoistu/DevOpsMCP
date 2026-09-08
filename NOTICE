@@ -1,0 +1,25 @@
+DevOpsMCP
+Copyright 2026 DevOpsMCP contributors
+
+This product includes software developed by the DevOpsMCP contributors,
+released under the Apache License, Version 2.0.
+
+---
+
+n9e-mcp-server is derived from the Nightingale (n9e) MCP server
+(module github.com/n9e/n9e-mcp-server). This tree keeps the stdio
+entry and the read-only toolsets (alerts, targets, datasource,
+busi_groups, metrics, logs). Write APIs, HTTP MCP mode, and unused
+packages were removed.
+
+Nightingale itself: https://github.com/ccfos/nightingale
+
+---
+
+jenkins-mcp-server is derived from jenkins-mcp-go
+https://github.com/2001adarsh/jenkins-mcp-go
+Copyright (c) 2026 Adarsh Singh
+Licensed under the MIT License (see jenkins-mcp-server/LICENSE).
+
+This tree registers read-only diagnosis tools only. Build/cancel/Groovy
+and full-console-path tools from upstream are not compiled in.

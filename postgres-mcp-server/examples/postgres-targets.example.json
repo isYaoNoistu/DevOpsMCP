@@ -1,0 +1,43 @@
+{
+  "targets": [
+    {
+      "name": "orders-prod",
+      "aliases": ["订单生产库", "orders prod"],
+      "description": "订单服务生产库（示例，请改成你的实例）",
+      "environment": "prod",
+      "host": "db.example.com",
+      "port": 5432,
+      "dbname": "orders",
+      "user": "mcp_ro",
+      "sslmode": "verify-full",
+      "credential_ref": "postgres/orders-prod",
+      "tags": ["orders", "production"]
+    },
+    {
+      "name": "shop-prod",
+      "aliases": ["商城生产库", "shop prod"],
+      "description": "商城服务生产库（示例）",
+      "environment": "prod",
+      "host": "db.example.com",
+      "port": 5432,
+      "dbname": "shop",
+      "user": "mcp_ro",
+      "sslmode": "verify-full",
+      "credential_ref": "postgres/shop-prod",
+      "tags": ["shop", "production"]
+    },
+    {
+      "name": "local-dev",
+      "aliases": ["本地库", "dev postgres"],
+      "description": "本机或无可信证书的非生产库可显式 disable / prefer",
+      "environment": "dev",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "dbname": "app_dev",
+      "user": "mcp_ro",
+      "sslmode": "disable",
+      "credential_ref": "postgres/local-dev",
+      "tags": ["local", "dev"]
+    }
+  ]
+}

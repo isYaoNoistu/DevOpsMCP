@@ -1,0 +1,5 @@
+/postgres-mcp-server
+/postgres-mcp-server.exe
+/*.exe
+/*.exe~
+.mcp.json

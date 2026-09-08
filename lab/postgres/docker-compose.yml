@@ -1,0 +1,31 @@
+# 一次性本机 PostgreSQL，只给 MCP 联调用。数据在 Docker volume 里，与生产无关。
+name: devops-mcp-pg-lab
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16}
+    container_name: ${POSTGRES_CONTAINER_NAME:-postgres-mcp-lab}
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mcp-lab-super}
+      POSTGRES_DB: mcp_lab
+    volumes:
+      - pg_lab_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mcp_lab"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pg_lab_data:
