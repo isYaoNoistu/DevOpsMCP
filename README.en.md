@@ -1,6 +1,6 @@
 <div align="center">
 
-# DevOpsMCP
+<h1>DevOpsMCP</h1>
 
 **Read-only MCP for on-call ops** — Nightingale alerts · Jenkins deploys · PostgreSQL troubleshooting
 

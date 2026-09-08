@@ -1,18 +1,36 @@
+<div align="center">
 
+<h1>DevOpsMCP</h1>
 
-# DevOpsMCP
+<p><b>值班运维的只读 MCP</b> — 夜莺告警 · Jenkins 发版 · PostgreSQL 排障</p>
 
-**值班运维的只读 MCP** — 夜莺告警 · Jenkins 发版 · PostgreSQL 排障
-
-**简体中文** · [English](README.en.md)
+<p><b>简体中文</b> · <a href="README.en.md">English</a></p>
 
 在 **WorkBuddy** 或 **Cursor** 里用自然语言查，不必在监控台、Jenkins 和控制台之间来回切。  
 三个二进制是标准 **MCP stdio**：编一次、同一段 `command` / `args` / `env`，换客户端只换配置文件放哪。  
 进程跑在**你的电脑**上，直连已有系统。凭据留在本机，仓库里没有 Token、没有密码、没有真实主机名。
 
-![Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue?labelColor=1f2937)![Go 1.23+](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white&labelColor=1f2937)![MCP stdio](https://img.shields.io/badge/MCP-stdio-7c3aed?labelColor=1f2937)![read-only](https://img.shields.io/badge/default-read--only-059669?labelColor=1f2937)
+<p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?labelColor=1f2937" alt="Apache 2.0"></a>
+  <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white&labelColor=1f2937" alt="Go 1.23+"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-stdio-7c3aed?labelColor=1f2937" alt="MCP stdio"></a>
+  <img src="https://img.shields.io/badge/default-read--only-059669?labelColor=1f2937" alt="read-only">
+</p>
 
-**[快速开始](#快速开始)** · [适配的智能体](#适配的智能体) · [它做什么](#它做什么) · [为什么是夜莺](#为什么是夜莺而不是-prometheus--elasticsearch) · [怎么工作](#怎么工作) · [三个服务](#三个服务) · [安全](#安全模型) · [测试与免责](#测试阶段与免责) · [适用边界](#什么时候用--什么时候不用) · [文档](#文档)
+<p>
+  <b><a href="#快速开始">快速开始</a></b> ·
+  <a href="#适配的智能体">适配的智能体</a> ·
+  <a href="#它做什么">它做什么</a> ·
+  <a href="#为什么是夜莺而不是-prometheus--elasticsearch">为什么是夜莺</a> ·
+  <a href="#怎么工作">怎么工作</a> ·
+  <a href="#三个服务">三个服务</a> ·
+  <a href="#安全模型">安全</a> ·
+  <a href="#测试阶段与免责">测试与免责</a> ·
+  <a href="#什么时候用--什么时候不用">适用边界</a> ·
+  <a href="#文档">文档</a>
+</p>
+
+</div>
 
 
 
