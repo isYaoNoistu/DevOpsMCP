@@ -6,7 +6,7 @@
 
 | 文件 | 放哪 | 进 Git 吗 | 作用 |
 | --- | --- | --- | --- |
-| `mcp.json` | 用户级 `~/.cursor/mcp.json` | 否 | 告诉 Cursor：二进制路径、**targets 文件路径**、只读开关 |
+| `mcp.json` | WorkBuddy：`~/.workbuddy/mcp.json`；Cursor：`~/.cursor/mcp.json`（其它见根 README） | 否 | 告诉客户端：二进制路径、**targets 文件路径**、只读开关 |
 | `postgres-targets.json` | 任意本机路径，由 `PG_TARGETS_FILE` 指向 | 否 | 有哪些库：host / dbname / user / sslmode。**禁止 password** |
 | 密码 | Windows 凭据管理器，或 `pgpass.conf` / `~/.pgpass` | 否 | 只给 `mcp_ro` 用，不进 targets、不进对话 |
 
@@ -17,7 +17,7 @@
 MCP **不**在 `mcp.json` 里为每个库放一个环境变量密码，也 **不**在 targets JSON 里存口令。连接串是运行时拼出来的：
 
 ```text
-Cursor
+MCP 客户端（WorkBuddy / Cursor / …）
   └─ 启动 postgres-mcp-server（stdio）
         ├─ 读 PG_TARGETS_FILE → 得到 name / host / port / dbname / user / sslmode / credential_ref
         ├─ 某次工具调用带 target=orders-prod
@@ -36,20 +36,21 @@ Cursor
 
 因此：targets 回答「连哪」；凭据库 / pgpass 回答「口令是什么」；`mcp.json` 只回答「清单文件在哪」。
 
-改 targets 文件后，下一轮 `list_targets` 会按文件 mtime 重新加载，**不用**重载 Cursor MCP。改二进制路径、改 `mcp.json` 里的环境变量，仍要在 MCP 面板重载。
+改 targets 文件后，下一轮 `list_targets` 会按文件 mtime 重新加载，**不用**重载 MCP。改二进制路径、改 `mcp.json` 里的环境变量，仍要在所用客户端里重载。
 
-## 1. Cursor：`mcp.json`
+## 1. 客户端：`mcp.json`
 
-只配进程，不配密码：
+WorkBuddy 与 Cursor 用同一段 JSON（建议 `"type": "stdio"`）。完整客户端列表见仓库根 README。只配进程，不配密码：
 
 ```json
 {
   "mcpServers": {
     "postgres": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
       "args": [],
       "env": {
-        "PG_TARGETS_FILE": "/ABS/PATH/.cursor/postgres-targets.json",
+        "PG_TARGETS_FILE": "/ABS/PATH/postgres-targets.json",
         "PG_MCP_READ_ONLY": "true"
       }
     }
@@ -197,4 +198,4 @@ Windows 需先建目录 `postgresql`（若没有）。Unix 上文件权限必须
 | 本机 Docker 用了默认 `verify-full` | 实验室写 `"sslmode": "disable"` 且 `environment`: `dev` |
 | 改了 targets 仍看到旧库 | JSON 无效时会保留上一份成功清单，看工具返回的 reload 错误 |
 
-改完 `mcp.json` 或重新 `go build` 后，在 Cursor 里重载 postgres MCP。只改 targets / pgpass / 凭据管理器，一般不用重载。
+改完 `mcp.json` 或重新 `go build` 后，在所用客户端里重载 postgres MCP。只改 targets / pgpass / 凭据管理器，一般不用重载。

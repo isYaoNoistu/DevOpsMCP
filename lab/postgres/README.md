@@ -10,7 +10,7 @@
 | --- | --- |
 | Docker Compose | 能拉 `postgres:16` |
 | Go 1.23+ | 编译 MCP 二进制 |
-| Cursor | 配置 stdio MCP 并重载 |
+| MCP 客户端 | WorkBuddy 或 Cursor（stdio MCP，配好后重载） |
 | 本机 5432 端口 | 被占用则改 `.env` 的 `POSTGRES_PORT`，并同步改 targets / pgpass 的端口 |
 
 ## 目录里有什么
@@ -26,7 +26,7 @@ lab/postgres/
 │   └── 03-schema.sql         chaos.orders / chaos.payments 样例数据
 ├── targets.lab.json          拷到本机的目标清单（无 password 字段）
 ├── pgpass.example            实验室 pgpass 一行
-├── mcp.fragment.json         粘进 ~/.cursor/mcp.json 的 postgres 段
+├── mcp.fragment.json         粘进 WorkBuddy / Cursor mcp.json 的 postgres 段
 └── scripts/
     ├── install-local-config.ps1 / .sh   安装 lab 清单和 pgpass 行
     └── make-blocking.ps1 / .sh          可选：制造锁等待
@@ -114,15 +114,15 @@ cd ..\..\postgres-mcp-server
 
 改了 `.env` 里的 `POSTGRES_PORT` 或 `MCP_RO_PASSWORD` 时：同步改 `targets.lab.json` 的 `port`、`init/02-role.sql`、`pgpass.example`，然后 `down -v` 重建，再跑安装脚本。
 
-### 4. 配置 Cursor 并重载
+### 4. 配置 MCP 并重载
 
-把 `mcp.fragment.json` 合并进用户级 `~/.cursor/mcp.json`：
+把 `mcp.fragment.json` 合并进所用客户端的 `mcp.json`（WorkBuddy：`~/.workbuddy/mcp.json` 或界面粘贴；Cursor：`~/.cursor/mcp.json`）：
 
 - `command` 改成你编出来的二进制**绝对路径**（Windows 带 `.exe`）
-- `PG_TARGETS_FILE` 改成安装脚本打印的 `postgres-targets.lab.json` 绝对路径
+- `PG_TARGETS_FILE` 改成安装脚本打印的 `postgres-targets.lab.json` 绝对路径（脚本默认写到 `~/.cursor/`，WorkBuddy 可把文件拷到别处，只要路径对上）
 - 保留 `"PG_MCP_READ_ONLY": "true"`
 
-在 Cursor MCP 面板重载 **postgres**。查库期间可先关掉夜莺 / Jenkins，避免工具数量顶到上限。
+在 MCP 面板重载 **postgres**。查库期间可先关掉夜莺 / Jenkins，避免工具数量顶到上限。
 
 ### 5. 在对话里按清单点名验收
 

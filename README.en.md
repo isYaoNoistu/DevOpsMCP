@@ -6,7 +6,8 @@
 
 <p><a href="README.md">简体中文</a> · <b>English</b></p>
 
-Ask in natural language from Cursor. Stop hopping between the monitoring UI, Jenkins, and a SQL client.  
+Ask in natural language from **WorkBuddy** or **Cursor**. Stop hopping between the monitoring UI, Jenkins, and a SQL client.  
+The three binaries are standard **MCP stdio**: build once, reuse the same `command` / `args` / `env`, and only change where each product stores config.  
 The process runs on **your laptop** and talks to systems you already have. Credentials stay local. This repo has no tokens, passwords, or real hostnames.
 
 <p>
@@ -18,6 +19,7 @@ The process runs on **your laptop** and talks to systems you already have. Crede
 
 <p>
   <b><a href="#quick-start">Quick start</a></b> ·
+  <a href="#compatible-agents">Compatible agents</a> ·
   <a href="#what-it-does">What it does</a> ·
   <a href="#why-nightingale-not-prometheus--elasticsearch">Why Nightingale</a> ·
   <a href="#how-it-works">How it works</a> ·
@@ -32,7 +34,9 @@ The process runs on **your laptop** and talks to systems you already have. Crede
 
 ---
 
-When alerts fire, a deploy goes red, or the database stalls, the time sink is rarely “not knowing how to look.” It is **scattered UIs, dropped context, and being one click too late**. DevOpsMCP hands three read-only diagnosis APIs to the agent already watching the alert group, and Skills pin the call order: list then detail, stage then Console, `target` then SQL.
+When alerts fire, a deploy goes red, or the database stalls, the time sink is rarely “not knowing how to look.” It is **scattered UIs, dropped context, and being one click too late**. DevOpsMCP hands three read-only diagnosis APIs to the agent already watching the alert group: list then detail, stage then Console, `target` then SQL.
+
+**The tools are portable.** Nightingale, Jenkins, and PostgreSQL speak MCP, not a particular chat product. WorkBuddy and Cursor use almost the same JSON: fill in absolute paths and credentials in [`examples/mcp.json.example`](examples/mcp.json.example) and both can launch the same binaries. Codex, Claude Code, Trae, Lingma, and any other MCP stdio client reuse the same `command` + `env`. You do not write a new MCP per IDE.
 
 | Situation | Without MCP | With DevOpsMCP |
 | --- | --- | --- |
@@ -45,7 +49,7 @@ When alerts fire, a deploy goes red, or the database stalls, the time sink is ra
 - **Nightingale MCP** — Fork of the [official n9e MCP](https://github.com/n9e/n9e-mcp-server): stdio plus six read-only toolsets (16 tools) for active/history alerts, rules, hosts, PromQL, and Loki / Elasticsearch / OpenSearch logs. Upstream HTTP mode, write tools, and unused packages (users, dashboards, mutes, …) are stripped.
 - **Jenkins MCP** — 18 read-only tools: jobs, failed builds, Pipeline stages, console tail and search, queue, nodes. No trigger, no stop, no Groovy.
 - **PostgreSQL MCP** — 19 read-only tools: one process, many instances via a local `target` file; sessions / locks / stats / replication plus one guarded `SELECT` escape hatch. More databases means editing local JSON, not more Tools.
-- **Cursor Skill + Rule** — Query skills and a hard read-only contract ship in the repo, so a different on-call engineer does not get an agent that fires every tool.
+- **Reusable query order** — [Skills](.cursor/skills/) and [Rules](.cursor/rules/) ship for Cursor. WorkBuddy and others can paste the same order into their own Skills. The binaries register no write tools, so safety does not depend on one vendor’s rules file.
 - **Local lab** — `lab/postgres` brings up a disposable Docker PostgreSQL and a 19-tool checklist, including the SQL guardrails.
 
 This is not an MCP Hub, not another HTTP gateway, and not a CMDB. Frequent questions get dedicated Tools. PostgreSQL uses a guarded `query_postgres` instead of one Tool per system view.
@@ -65,30 +69,52 @@ Jenkins and PostgreSQL have no equivalent on-call aggregation plane, so those tw
 ## How it works
 
 ```
-  On-call  →  Cursor / any MCP client
-                    │  Natural language: "charging prod is red" / "idle in transaction"
-                    ▼
-         ┌──────────────────────────────────────────┐
-         │  Local stdio MCP (your laptop, not the DC)│
-         │  nightingale · jenkins · postgres        │
-         │  Skills set order · Rules forbid claiming writes │
-         └──────────────────────────────────────────┘
-              │              │               │
-              ▼              ▼               ▼
-         Nightingale API  Jenkins REST     PostgreSQL
-         X-User-Token     user + API token   mcp_ro + pgpass / Credential Manager
+  On-call
+       │
+       ▼
+  WorkBuddy · Cursor · Codex · Claude Code · Trae · Lingma · …
+       │  Natural language: "charging prod is red" / "idle in transaction"
+       ▼
+  ┌────────────────────────────────────────────┐
+  │  Local stdio MCP (your laptop, not the DC) │
+  │  nightingale · jenkins · postgres          │
+  │  Build once; clients only differ in config │
+  └────────────────────────────────────────────┘
+         │              │               │
+         ▼              ▼               ▼
+    Nightingale API  Jenkins REST     PostgreSQL
+    X-User-Token     user + API token   mcp_ro + pgpass / Credential Manager
 ```
 
-- **Secrets stay off git**: `mcp.json` is local only; the PostgreSQL targets JSON **rejects** a `password` field.
+- **Secrets stay off git**: `mcp.json` / `config.toml` is local only; the PostgreSQL targets JSON **rejects** a `password` field.
 - **Binaries register no write tools**: no `trigger_build`, no alert-rule edits, no `VACUUM` / `pg_terminate_backend`.
 - **Platform accounts are still the floor**: Jenkins needs Overall/Read + Job/Read; PostgreSQL uses `mcp_ro` plus role-level `READ ONLY`.
-- **Editing targets does not require an MCP reload**: PostgreSQL hot-reloads on file mtime. Changing the binary or `mcp.json` still needs a reload in the Cursor MCP panel.
+- **Editing targets does not require an MCP reload**: PostgreSQL hot-reloads on file mtime. After changing the binary path or env vars, reload that server in whichever client you use.
 
-With all three servers enabled, tool count may exceed the common Cursor Community cap (~40). Disable the two you are not using for that incident.
+With all three servers enabled, some clients (Cursor Community is a common example) cap tools around 40. Disable the two you are not using for that incident.
+
+## Compatible agents
+
+**WorkBuddy + Cursor** are the primary path: both use `mcpServers` → `command` / `args` / `env`. Drop the same example into each product’s config file. Other MCP stdio clients are already compatible at the protocol layer; only the file path or encoding changes.
+
+| Client | Config location | How to connect |
+| --- | --- | --- |
+| **WorkBuddy** (Tencent Cloud CodeBuddy) | User `~/.workbuddy/mcp.json`, or project `.workbuddy/mcp.json`; or paste in UI (Plugins → MCP servers) | **Same JSON** as the example. Prefer `"type": "stdio"` (already in the sample). [WorkBuddy MCP docs](https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/MCP-Guide) |
+| **Cursor** | User `~/.cursor/mcp.json`, or project `.cursor/mcp.json` | Same JSON. Opening this repo enables `.cursor/skills` and `.cursor/rules` for the workspace |
+| **Codex** (OpenAI) | `~/.codex/config.toml` | **Not JSON.** Map the same `command` / `args` / `env` into `[mcp_servers.nightingale]` tables: [`examples/codex.toml.example`](examples/codex.toml.example) |
+| **Claude Code** | `claude mcp add` or user-level MCP JSON (`mcpServers`) | Same `command` + `env` |
+| **Trae** | User/project MCP config (often `.trae/mcp.json`) | Same `mcpServers` JSON |
+| **Lingma / Qoder** | IDE “MCP services” or a config file | STDIO: command, args, env; or paste isomorphic JSON |
+| **VS Code Copilot** | User MCP config | Often `"servers"` instead of `"mcpServers"`; `command` / `args` / `env` mean the same |
+| **Any other MCP client** | See that product’s docs | If it can spawn a local process over stdio, point it at these three binaries |
+
+**Tools travel; chat habits do not.** Each product owns Skills / system prompts: Cursor uses the repo Skills; WorkBuddy gets the same query order as its own Skill; Codex uses `AGENTS.md` and friends. After switching clients, copy “list then detail; no writes unless explicitly asked,” or the agent may spray every tool. The binaries still have no write tools.
+
+Config paths change with product versions — trust the vendor docs. After wiring, confirm all three servers are green in that product’s MCP panel.
 
 ## Quick start
 
-Needs **Go 1.23+**. Binaries are not committed; you build them.
+Needs **Go 1.23+**. Binaries are not committed; you build them once for WorkBuddy and Cursor.
 
 ```bash
 git clone https://github.com/isYaoNoistu/DevOpsMCP.git
@@ -102,7 +128,10 @@ go build -o postgres-mcp-server/postgres-mcp-server.exe ./postgres-mcp-server/
 # Linux / macOS: drop the .exe suffix
 ```
 
-Copy [`examples/mcp.json.example`](examples/mcp.json.example) to user-level `~/.cursor/mcp.json`. Set `command` to an **absolute path** (Windows points at `.exe`). Replace URLs and tokens with yours.
+1. Copy [`examples/mcp.json.example`](examples/mcp.json.example).
+2. Set `command` to an **absolute path** (Windows points at `.exe`). Replace URLs and tokens. `PG_TARGETS_FILE` may be any local path; it does not have to live under `.cursor`.
+3. **WorkBuddy**: paste into MCP settings or write `~/.workbuddy/mcp.json`. **Cursor**: write `~/.cursor/mcp.json`. Both can point at the same binaries.
+4. Codex: copy [`examples/codex.toml.example`](examples/codex.toml.example) into `config.toml`.
 
 | Server | Credentials you need | How to get them |
 | --- | --- | --- |
@@ -110,24 +139,22 @@ Copy [`examples/mcp.json.example`](examples/mcp.json.example) to user-level `~/.
 | Jenkins | `JENKINS_URL` + read-only user + API Token | Create a user → grant Read only → generate a token on that user’s Configure page. [jenkins README](jenkins-mcp-server/README.md#如何创建-jenkins-只读用户和-api-token) (Chinese) |
 | PostgreSQL | `PG_TARGETS_FILE` + `mcp_ro` password | Superuser runs the role SQL; password goes in Credential Manager or pgpass, **not** in targets. [postgres README](postgres-mcp-server/README.md#用-postgres-超级用户创建-mcp_ro) · [configuration](postgres-mcp-server/docs/configuration.md) (Chinese) |
 
-Open **this repo** in Cursor so `.cursor/skills` and `.cursor/rules` apply with the workspace. If the MCP binaries live in another ops repo, copy `.cursor/skills/{nightingale,jenkins,postgres}` there.
+After editing config or `go build`, **reload** the matching MCP in the client you use. For repo Skills, open this repo in Cursor; if the binaries live in another ops repo, copy `.cursor/skills/{nightingale,jenkins,postgres}` there.
 
-After editing `mcp.json` or `go build`, **reload** the matching server in the MCP panel.
+Handshake only, no real systems: each directory’s `scripts/smoke-stdio.ps1`. PostgreSQL from scratch, 19 tools: [lab/postgres](lab/postgres/README.md) (a separate `postgres-targets.lab.json`, so your production list is not overwritten). The lab steps are written for Cursor; in WorkBuddy paste the same `mcp.fragment.json` into your `mcp.json`.
 
-Handshake only, no real systems: each directory’s `scripts/smoke-stdio.ps1`. PostgreSQL from scratch, 19 tools: [lab/postgres](lab/postgres/README.md) (a separate `postgres-targets.lab.json`, so your production list is not overwritten).
-
-Per-server READMEs, Skills, and the lab checklist are currently **Chinese**. This English file covers the overview, rationale, security, and disclaimer.
+Per-server READMEs, Skills, and the lab checklist are currently **Chinese**. This English file covers the overview, clients, security, and disclaimer.
 
 ## The three servers
 
 | | Nightingale | Jenkins | PostgreSQL |
 | --- | --- | --- | --- |
 | Directory | [n9e-mcp-server](n9e-mcp-server/README.md) | [jenkins-mcp-server](jenkins-mcp-server/README.md) | [postgres-mcp-server](postgres-mcp-server/README.md) |
-| Cursor name | `nightingale` | `jenkins` | `postgres` |
+| Config name | `nightingale` | `jenkins` | `postgres` |
 | Tool count | 16 | 18 | 19 |
 | Auth | `X-User-Token` | HTTP Basic (username + API Token) | `mcp_ro` + Credential Manager / pgpass |
 | Typical order | alert list → detail → reuse PromQL / log body | `list_jobs` → build → stage → search Console | `list_targets` → dedicated diagnostics → `query_postgres` only if needed |
-| Skill | [nightingale](.cursor/skills/nightingale/SKILL.md) | [jenkins](.cursor/skills/jenkins/SKILL.md) | [postgres](.cursor/skills/postgres/SKILL.md) |
+| Query order (Cursor Skill) | [nightingale](.cursor/skills/nightingale/SKILL.md) | [jenkins](.cursor/skills/jenkins/SKILL.md) | [postgres](.cursor/skills/postgres/SKILL.md) |
 
 Nightingale MCP is a fork of [n9e/n9e-mcp-server](https://github.com/n9e/n9e-mcp-server) (Flashcat Nightingale’s official open-source MCP), read-only toolsets only. Jenkins is trimmed from [jenkins-mcp-go](https://github.com/2001adarsh/jenkins-mcp-go): no trigger/stop/Groovy/full-console paths (console defaults to the last 500 lines, cap 2000). Licenses and upstream notes: [NOTICE](NOTICE).
 
@@ -152,13 +179,13 @@ Extra PostgreSQL constraints:
 - `query_postgres` accepts a single `SELECT` / `WITH`, blocks `dblink*`, advisory locks, and multi-statement; `DISCARD ALL` before returning a connection to the pool
 - `explain_query analyze=true` is refused on production targets
 
-The agent must not claim it retried a build, muted an alert, killed a session, or changed data. Rules: [`.cursor/rules/devops-mcp.mdc`](.cursor/rules/devops-mcp.mdc).
+The agent must not claim it retried a build, muted an alert, killed a session, or changed data. Cursor rules: [`.cursor/rules/devops-mcp.mdc`](.cursor/rules/devops-mcp.mdc). Other clients should carry the same contract in their own Skills / system prompts.
 
 ## Preview status and disclaimer
 
 This repository is in **preview**. APIs, tool lists, Skills, and the default read-only boundary may change. It is provided **AS IS** under [Apache License 2.0](LICENSE) and **is not a warranty or commitment for any production environment**.
 
-After you build, configure, and point these servers at real Nightingale / Jenkins / PostgreSQL, any query failure, misdiagnosis, data leak, or business impact from misuse, bad credentials, agent hallucination, upstream API changes, network faults, or platform outages is **your responsibility. Authors and contributors are not liable.** Before production, use read-only accounts and validate in your own environment. When something breaks, check local `mcp.json`, platform ACLs, and the upstream service first — do not assume this repo is at fault.
+After you build, configure, and point these servers at real Nightingale / Jenkins / PostgreSQL, any query failure, misdiagnosis, data leak, or business impact from misuse, bad credentials, agent hallucination, upstream API changes, network faults, or platform outages is **your responsibility. Authors and contributors are not liable.** Before production, use read-only accounts and validate in your own environment. When something breaks, check local MCP config, platform ACLs, and the upstream service first — do not assume this repo is at fault.
 
 This release **does not register write tools**. If you fork this tree or upstream and put writes back (edit alert rules, mutes, trigger builds, Groovy, `VACUUM`, kill sessions, …):
 
@@ -170,11 +197,11 @@ This release **does not register write tools**. If you fork this tree or upstrea
 
 ## When to use · when not to
 
-**Use it when**: Nightingale + Jenkins + PostgreSQL are already running; on-call needs natural language to join alerts / red builds / lock waits; you want the agent to **inspect production, not mutate it**.
+**Use it when**: Nightingale + Jenkins + PostgreSQL are already running; on-call needs natural language to join alerts / red builds / lock waits; you want the agent to **inspect production, not mutate it**; WorkBuddy, Cursor, or another MCP client can run stdio.
 
-**Skip it when**: those three systems are not there yet; you need MCP to click “Build now” or edit alert rules (use your change process); the question is short and not about live state (no MCP needed).
+**Skip it when**: those three systems are not there yet; you need MCP to click “Build now” or edit alert rules (use your change process); the question is short and not about live state (no MCP needed); the client only speaks remote HTTP MCP and cannot spawn a local process (this tree dropped Nightingale HTTP mode).
 
-Vs. a home-grown poller: scripts fit fixed checks; on-call questions change every time. MCP gives the agent a read-only client, and Skills keep a whole Console dump out of one turn. You do not have to use Cursor — the three binaries are standard stdio MCP and can hang off any MCP client.
+Vs. a home-grown poller: scripts fit fixed checks; on-call questions change every time. MCP gives the agent a read-only client, and query order keeps a whole Console dump out of one turn.
 
 ## Docs
 
@@ -182,11 +209,12 @@ Service READMEs below are Chinese.
 
 | Start here | Then |
 | --- | --- |
+| [Compatible agents](#compatible-agents) | [mcp.json example](examples/mcp.json.example) · [Codex TOML example](examples/codex.toml.example) |
 | [Nightingale: get a token](n9e-mcp-server/README.md#如何拿到夜莺-token) | [Nightingale tools and mcp.json](n9e-mcp-server/README.md) |
 | [Jenkins: user + API token](jenkins-mcp-server/README.md#如何创建-jenkins-只读用户和-api-token) | [Jenkins tools and diagnosis order](jenkins-mcp-server/README.md) |
 | [PostgreSQL: create mcp_ro as postgres](postgres-mcp-server/README.md#用-postgres-超级用户创建-mcp_ro) | [targets / pgpass](postgres-mcp-server/docs/configuration.md) |
 | [Docker lab checklist](lab/postgres/README.md) | [Skill: postgres](.cursor/skills/postgres/SKILL.md) |
-| [mcp.json example](examples/mcp.json.example) | [no-secrets rule](.cursor/rules/no-secrets.mdc) |
+| [no-secrets rule](.cursor/rules/no-secrets.mdc) | |
 
 ## Layout
 
@@ -195,14 +223,14 @@ n9e-mcp-server/          Nightingale read-only MCP (fork of official n9e MCP)
 jenkins-mcp-server/      Jenkins read-only MCP (trimmed jenkins-mcp-go, MIT)
 postgres-mcp-server/     Multi-target PostgreSQL read-only MCP
 lab/postgres/            Local Docker lab + checklist
-examples/                Desensitized mcp.json example
-.cursor/skills/          Query skills for the agent
-.cursor/rules/           Hard read-only and no-secrets rules
+examples/                mcp.json and Codex TOML samples
+.cursor/skills/          Cursor query skills (other clients can restate the same order)
+.cursor/rules/           Cursor read-only and no-secrets rules
 README.md                Chinese (GitHub default)
 README.en.md             English
 ```
 
-Each service README covers: purpose, how to get credentials, tool scope, build, Cursor config. Upstream marketing, Docker images, and real environment configs stay out of this repo.
+Each service README covers: purpose, how to get credentials, tool scope, build, local MCP config. Upstream marketing, Docker images, and real environment configs stay out of this repo.
 
 ## Contributing
 
@@ -213,7 +241,7 @@ cd ../jenkins-mcp-server && go test ./...
 cd ../postgres-mcp-server && go test ./...
 ```
 
-Issues / PRs welcome: new read-only diagnosis Tools, clearer Skills, cross-platform docs. Do not commit production tokens, passwords, private IPs, real job names, or customer database names. Passwords marked as one-shot Docker-only under `lab/` may stay. After a behavior change, update the matching README and Skill. Root overview: keep [README.md](README.md) (Chinese, default) and [README.en.md](README.en.md) (English) in sync.
+Issues / PRs welcome: new read-only diagnosis Tools, clearer Skills, corrections to other clients’ config paths. Do not commit production tokens, passwords, private IPs, real job names, or customer database names. Passwords marked as one-shot Docker-only under `lab/` may stay. After a behavior change, update the matching README and Skill. Root overview: keep [README.md](README.md) (Chinese, default) and [README.en.md](README.en.md) (English) in sync.
 
 ## License
 

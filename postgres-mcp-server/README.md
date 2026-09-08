@@ -75,7 +75,7 @@ FROM pg_roles WHERE rolname = 'mcp_ro';
 
 ## 能力
 
-Cursor 命名空间通常是 `user-postgres`。本二进制注册 19 个只读工具。
+Cursor 里命名空间通常是 `user-postgres`；WorkBuddy 等以该产品 MCP 面板里的名字为准。本二进制注册 19 个只读工具。
 
 | 层 | 能力 | 工具 |
 | --- | --- | --- |
@@ -89,7 +89,7 @@ Cursor 命名空间通常是 `user-postgres`。本二进制注册 19 个只读�
 
 未注册、不要调用：任意 `INSERT`/`UPDATE`/`DELETE`/`VACUUM`/`DROP` 类工具。`query_postgres` 只接受单条 `SELECT`/`WITH`，在 `BEGIN READ ONLY` 里执行，有 statement/lock/行数/体积限制。扫描器会检查带引号的标识符（`public."dblink_exec"`）以及 `pg_advisory_lock` / `dblink*` 等有副作用的函数。连接归还池子前会 `DISCARD ALL`，避免会话级锁留在连接上。不要在里面写 `EXPLAIN ANALYZE`；看计划用 `explain_query`（默认不执行 SQL）。生产 target（`environment`/`tags` 为 prod/production/prd，或 name 以 `-prod` / `_prod` 结尾）上 `analyze=true` 会被拒绝。
 
-`list_targets` / `get_target_info` 每次调用会检查 targets 文件 mtime。JSON 错误、重复 name、缺字段时会向调用方报错，并继续保留上一份成功清单，不会假装已经切库。改文件后下一轮即可看到新库，不用重载 Cursor MCP，也不用改 `mcp.json`。删除或改名的 target 会立刻关掉对应连接池。
+`list_targets` / `get_target_info` 每次调用会检查 targets 文件 mtime。JSON 错误、重复 name、缺字段时会向调用方报错，并继续保留上一份成功清单，不会假装已经切库。改文件后下一轮即可看到新库，不用重载 MCP，也不用改客户端配置。删除或改名的 target 会立刻关掉对应连接池。
 
 `name` 是稳定机器 ID（如 `orders-prod`）。人类可读名称放 `aliases` / `tags` / `description`。除 `list_targets` 外，其它工具都要带 `target`。别名冲突时返回候选，不猜。
 
@@ -103,7 +103,7 @@ Cursor 命名空间通常是 `user-postgres`。本二进制注册 19 个只读�
 
 | 文件 | 放哪 | 写什么 |
 | --- | --- | --- |
-| `~/.cursor/mcp.json` | Cursor 用户配置 | 二进制路径 + `PG_TARGETS_FILE`（绝对路径）+ `PG_MCP_READ_ONLY=true`。**不写密码** |
+| 客户端 `mcp.json` | WorkBuddy：`~/.workbuddy/mcp.json`；Cursor：`~/.cursor/mcp.json`（其它见根 README） | 二进制路径 + `PG_TARGETS_FILE`（绝对路径）+ `PG_MCP_READ_ONLY=true`。**不写密码** |
 | targets JSON | `PG_TARGETS_FILE` 指向的任意本机路径 | `name` / `host` / `dbname` / `user` / `sslmode` / `credential_ref`。**禁止 `password` 字段** |
 | 密码 | Windows：凭据管理器 Generic 目标 = `credential_ref`；或 pgpass | 见下 |
 
@@ -138,18 +138,19 @@ go build -o postgres-mcp-server.exe .
 
 二进制不入库。改源码后在本机重新 `go build`。
 
-## 本机 Cursor 配置
+## 本机 MCP 配置
 
-写在用户级 `~/.cursor/mcp.json`。targets 文件放在本机（例如 `~/.cursor/postgres-targets.json`），**不入库**。样例见 `examples/postgres-targets.example.json`。完整 `mcp.json` 见 [`examples/mcp.json.example`](../examples/mcp.json.example)。
+WorkBuddy 与 Cursor 用同一段 JSON。WorkBuddy 写入 `~/.workbuddy/mcp.json` 或在界面粘贴；Cursor 写入 `~/.cursor/mcp.json`。其它客户端见根 README [适配的智能体](../README.md#适配的智能体)。targets 文件放在本机任意路径（不必在 `.cursor` 下），**不入库**。样例见 `examples/postgres-targets.example.json`。完整 `mcp.json` 见 [`examples/mcp.json.example`](../examples/mcp.json.example)。
 
 ```json
 {
   "mcpServers": {
     "postgres": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
       "args": [],
       "env": {
-        "PG_TARGETS_FILE": "/ABS/PATH/.cursor/postgres-targets.json",
+        "PG_TARGETS_FILE": "/ABS/PATH/postgres-targets.json",
         "PG_MCP_READ_ONLY": "true"
       }
     }
@@ -163,7 +164,7 @@ go build -o postgres-mcp-server.exe .
 
 19 个工具都声明了 `ReadOnlyHint=true` 和 `OutputSchema`。
 
-本机同时开着夜莺 + Jenkins + PostgreSQL 时，可能超过 Cursor 社区常见的约 40 个工具会话上限。查库时在 MCP 面板关掉暂不用的服务。
+本机同时开着夜莺 + Jenkins + PostgreSQL 时，有的客户端（例如 Cursor 社区版）工具数上限大约 40。查库时在 MCP 面板关掉暂不用的服务。
 
 ## 本机验收
 
@@ -172,7 +173,7 @@ go build -o postgres-mcp-server.exe .
 .\scripts\smoke-stdio.ps1
 ```
 
-接真实或实验室库：按 [docs/configuration.md](docs/configuration.md) 配好三份文件后，Cursor 里 `list_targets` → `get_server_overview`。从零搭 Docker 实验室并按 19 个工具打勾：[lab/postgres/README.md](../lab/postgres/README.md)。
+接真实或实验室库：按 [docs/configuration.md](docs/configuration.md) 配好三份文件后，在所用客户端里 `list_targets` → `get_server_overview`。从零搭 Docker 实验室并按 19 个工具打勾：[lab/postgres/README.md](../lab/postgres/README.md)。
 
 ## 目录
 

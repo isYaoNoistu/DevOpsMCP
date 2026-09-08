@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "postgres": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
       "args": [],
       "env": {

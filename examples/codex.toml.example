@@ -1,0 +1,31 @@
+# Codex (~/.codex/config.toml) — same binaries as examples/mcp.json.example
+# Replace /ABS/PATH and placeholder credentials. Do not commit real tokens.
+
+[mcp_servers.nightingale]
+command = "/ABS/PATH/DevOpsMCP/n9e-mcp-server/n9e-mcp-server"
+args = ["stdio"]
+
+[mcp_servers.nightingale.env]
+N9E_TOKEN = "<nightingale-personal-token>"
+N9E_BASE_URL = "http://nightingale.example.com:17000"
+N9E_TOOLSETS = "alerts,targets,datasource,busi_groups,metrics,logs"
+N9E_READ_ONLY = "true"
+N9E_MCP_LOG_LEVEL = "info"
+
+[mcp_servers.jenkins]
+command = "/ABS/PATH/DevOpsMCP/jenkins-mcp-server/jenkins-mcp-server"
+args = []
+
+[mcp_servers.jenkins.env]
+JENKINS_URL = "https://jenkins.example.com"
+JENKINS_USER = "<readonly-user>"
+JENKINS_API_TOKEN = "<jenkins-api-token>"
+JENKINS_MCP_TIMEOUT = "90s"
+
+[mcp_servers.postgres]
+command = "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server"
+args = []
+
+[mcp_servers.postgres.env]
+PG_TARGETS_FILE = "/ABS/PATH/postgres-targets.json"
+PG_MCP_READ_ONLY = "true"

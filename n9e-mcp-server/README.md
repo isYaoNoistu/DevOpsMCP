@@ -4,7 +4,7 @@
 
 基于 [n9e 官方开源 MCP](https://github.com/n9e/n9e-mcp-server) 二次开发（上游自称 *Nightingale's official MCP Server*）。本树只留 stdio 入口和这 6 个只读 toolset，去掉 HTTP 模式、写工具、用户/看板/屏蔽等未使用包。夜莺产品本身见 [ccfos/nightingale](https://github.com/ccfos/nightingale)。许可证与上游说明见仓库根目录 [NOTICE](../NOTICE)。
 
-不做 Prometheus / Elasticsearch 专用 MCP：夜莺已经能同时看告警、指标和日志，把对应数据源接到夜莺即可，本进程只调夜莺 API。理由见根 README [为什么是夜莺](../README.md#为什么是夜莺而不是-prometheus--elasticsearch)。尚在测试阶段，使用风险与写操作二开注意见 [测试阶段与免责](../README.md#测试阶段与免责)。
+不做 Prometheus / Elasticsearch 专用 MCP：夜莺已经能同时看告警、指标和日志，把对应数据源接到夜莺即可，本进程只调夜莺 API。理由见根 README [为什么是夜莺](../README.md#为什么是夜莺而不是-prometheus--elasticsearch)。WorkBuddy、Cursor 及其它 stdio 客户端怎么接见 [适配的智能体](../README.md#适配的智能体)。尚在测试阶段，使用风险与写操作二开注意见 [测试阶段与免责](../README.md#测试阶段与免责)。
 
 ## 默认范围
 
@@ -14,7 +14,7 @@
 alerts, targets, datasource, busi_groups, metrics, logs
 ```
 
-`--read-only` 默认为 `true`。Cursor 配置再加一层：
+`--read-only` 默认为 `true`。MCP 客户端配置再加一层：
 
 ```text
 N9E_TOOLSETS=alerts,targets,datasource,busi_groups,metrics,logs
@@ -47,9 +47,9 @@ MCP 用请求头 `X-User-Token` 调夜莺 HTTP API，**不是**登录密码，�
 2. 点右上角头像 / 用户名，进入 **个人设置**（或 **个人中心**）。
 3. 打开 **Token 管理**（有的版本叫 **Access Token** / **令牌**）。
 4. **新建 Token**，备注写成 `cursor-mcp` 之类，便于以后吊销。
-5. **只在创建成功那一次能看到完整 Token**。立刻复制，发给本机 `~/.cursor/mcp.json` 的 `N9E_TOKEN`。不要写入 Git、不要贴进群、不要截图进开源文档。
+5. **只在创建成功那一次能看到完整 Token**。立刻复制，发给本机 MCP 配置里的 `N9E_TOKEN`（WorkBuddy：`~/.workbuddy/mcp.json`；Cursor：`~/.cursor/mcp.json`）。不要写入 Git、不要贴进群、不要截图进开源文档。
 
-Token 泄露或人走了：回到同一页删除/禁用该 Token，再发一颗新的并重载 Cursor MCP。
+Token 泄露或人走了：回到同一页删除/禁用该 Token，再发一颗新的并在所用客户端里重载 MCP。
 
 ### 3. 填 `N9E_BASE_URL`
 
@@ -63,13 +63,13 @@ $env:N9E_BASE_URL = "http://nightingale.example.com:17000"
 curl.exe -sS -H "X-User-Token: $env:N9E_TOKEN" "$env:N9E_BASE_URL/api/n9e/self/profile"
 ```
 
-能返回当前用户 JSON 即可。401：Token 错或已删。403：用户没有该接口权限。然后把同样两项写进 `mcp.json`（见下一节），在 Cursor 里重载 nightingale。
+能返回当前用户 JSON 即可。401：Token 错或已删。403：用户没有该接口权限。然后把同样两项写进 MCP 配置（见下一节），重载 nightingale。
 
 查询约定见 [夜莺 Skill](../.cursor/skills/nightingale/SKILL.md)。
 
 ## 能力
 
-Cursor 命名空间通常是 `user-nightingale`。本二进制注册 16 个只读工具。
+Cursor 里命名空间通常是 `user-nightingale`；WorkBuddy 等以该产品 MCP 面板里的名字为准。本二进制注册 16 个只读工具。
 
 | 能力 | 工具 | 说明 |
 | --- | --- | --- |
@@ -105,14 +105,15 @@ go build -o n9e-mcp-server.exe ./cmd/n9e-mcp-server/   # Windows
 
 二进制不入库。改源码后在本机重新 `go build`。
 
-## 本机 Cursor 配置
+## 本机 MCP 配置
 
-写在用户级 `~/.cursor/mcp.json`，不要把 Token 提交到本仓库。完整样例见 [`examples/mcp.json.example`](../examples/mcp.json.example)。
+WorkBuddy 与 Cursor 用同一段 JSON（建议带 `"type": "stdio"`）。WorkBuddy 写入 `~/.workbuddy/mcp.json` 或在界面粘贴；Cursor 写入 `~/.cursor/mcp.json`。其它客户端见根 README [适配的智能体](../README.md#适配的智能体)。不要把 Token 提交到本仓库。完整样例见 [`examples/mcp.json.example`](../examples/mcp.json.example)。
 
 ```json
 {
   "mcpServers": {
     "nightingale": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/n9e-mcp-server/n9e-mcp-server",
       "args": ["stdio"],
       "env": {
@@ -127,7 +128,7 @@ go build -o n9e-mcp-server.exe ./cmd/n9e-mcp-server/   # Windows
 }
 ```
 
-Token 按上一节在夜莺「个人设置 → Token 管理」创建，只放本机 `mcp.json`。改配置后重载 Cursor MCP 或新开对话。
+Token 按上一节在夜莺「个人设置 → Token 管理」创建，只放本机 MCP 配置。改配置后在所用客户端里重载或新开对话。
 
 查询日志时，`list_log_indices` / `query_logs` 的 `body` 必须带 `cate`（Elasticsearch 为 `elasticsearch`），只传 `datasource_id` 会返回 `cluster not exists`。
 

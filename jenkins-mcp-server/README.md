@@ -58,7 +58,7 @@ API Token **必须由这个用户登录后生成**（管理员代替生成的方
    - `JENKINS_API_TOKEN`：刚复制的 Token
    - `JENKINS_URL`：Jenkins 根 URL，例如 `https://jenkins.example.com`（不要接到某个 `/job/...` 上）
 
-Token 泄露：回到同一页 revoke 旧 Token，再发一颗并重载 Cursor MCP。
+Token 泄露：回到同一页 revoke 旧 Token，再发一颗并在所用客户端里重载 MCP。
 
 本机快速验证：
 
@@ -73,7 +73,7 @@ curl.exe -sS -u "mcp-readonly:<api-token>" "https://jenkins.example.com/api/json
 
 ## 能力
 
-Cursor 命名空间通常是 `user-jenkins`。本二进制注册 18 个只读工具。
+Cursor 里命名空间通常是 `user-jenkins`；WorkBuddy 等以该产品 MCP 面板里的名字为准。本二进制注册 18 个只读工具。
 
 | 能力 | 工具 | 说明 |
 | --- | --- | --- |
@@ -110,14 +110,15 @@ go build -o jenkins-mcp-server.exe .
 
 二进制不入库。改源码后在本机重新 `go build`。
 
-## 本机 Cursor 配置
+## 本机 MCP 配置
 
-写在用户级 `~/.cursor/mcp.json`，不要把 Token 提交到本仓库。用户和 Token 按上一节创建；账号只要 Overall/Read + Job/Read，不要给 Build / Cancel / Configure。完整样例见 [`examples/mcp.json.example`](../examples/mcp.json.example)。
+WorkBuddy 与 Cursor 用同一段 JSON。WorkBuddy 写入 `~/.workbuddy/mcp.json` 或在界面粘贴；Cursor 写入 `~/.cursor/mcp.json`。其它客户端见根 README [适配的智能体](../README.md#适配的智能体)。不要把 Token 提交到本仓库。用户和 Token 按上一节创建；账号只要 Overall/Read + Job/Read，不要给 Build / Cancel / Configure。完整样例见 [`examples/mcp.json.example`](../examples/mcp.json.example)。
 
 ```json
 {
   "mcpServers": {
     "jenkins": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/jenkins-mcp-server/jenkins-mcp-server",
       "args": [],
       "env": {
@@ -131,7 +132,7 @@ go build -o jenkins-mcp-server.exe .
 }
 ```
 
-改配置后重载 Cursor MCP 或新开对话。`health_check` 对 `/pluginManager` 的 403 是只读账号无插件管理权限，预期 WARN，不影响查 Job。
+改配置后在所用客户端里重载或新开对话。`health_check` 对 `/pluginManager` 的 403 是只读账号无插件管理权限，预期 WARN，不影响查 Job。
 
 ## 本机验收
 

@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "nightingale": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/n9e-mcp-server/n9e-mcp-server",
       "args": ["stdio"],
       "env": {
@@ -12,6 +13,7 @@
       }
     },
     "jenkins": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/jenkins-mcp-server/jenkins-mcp-server",
       "args": [],
       "env": {
@@ -22,10 +24,11 @@
       }
     },
     "postgres": {
+      "type": "stdio",
       "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
       "args": [],
       "env": {
-        "PG_TARGETS_FILE": "/ABS/PATH/.cursor/postgres-targets.json",
+        "PG_TARGETS_FILE": "/ABS/PATH/postgres-targets.json",
         "PG_MCP_READ_ONLY": "true"
       }
     }
