@@ -114,24 +114,38 @@ Config paths change with product versions — trust the vendor docs. After wirin
 
 ## Quick start
 
-Needs **Go 1.23+**. Binaries are not committed; you build them once for WorkBuddy and Cursor.
+Needs **Go 1.23+** (pack scripts use a golang Docker image if Go is missing). Binaries are not committed. Build once for WorkBuddy and Cursor.
 
 ```bash
 git clone https://github.com/isYaoNoistu/DevOpsMCP.git
-cd DevOpsMCP
-
-# Windows
-go build -o n9e-mcp-server/n9e-mcp-server.exe ./n9e-mcp-server/cmd/n9e-mcp-server/
-go build -o jenkins-mcp-server/jenkins-mcp-server.exe ./jenkins-mcp-server/
-go build -o postgres-mcp-server/postgres-mcp-server.exe ./postgres-mcp-server/
-
-# Linux / macOS: drop the .exe suffix
+cd DevOpsMCP/deploy
 ```
 
-1. Copy [`examples/mcp.json.example`](examples/mcp.json.example).
-2. Set `command` to an **absolute path** (Windows points at `.exe`). Replace URLs and tokens. `PG_TARGETS_FILE` may be any local path; it does not have to live under `.cursor`.
-3. **WorkBuddy**: paste into MCP settings or write `~/.workbuddy/mcp.json`. **Cursor**: write `~/.cursor/mcp.json`. Both can point at the same binaries.
+**Windows (cmd):**
+
+```bat
+pack-windows.cmd
+```
+
+Output: `deploy\dist\devopsmcp-windows-amd64\` (three `.exe` files + examples).
+
+**Linux:**
+
+```bash
+chmod +x pack-linux.sh
+./pack-linux.sh
+```
+
+Output: `deploy/dist/devopsmcp-linux-amd64/`.
+
+1. Open `examples/mcp.json.example` inside the pack (same file as the repo root).
+2. Set `command` to an **absolute path of a binary in that folder** (Windows: `.exe`). Replace URLs and tokens. `PG_TARGETS_FILE` may be any local path.
+3. **WorkBuddy**: paste into MCP settings or write `~/.workbuddy/mcp.json`. **Cursor**: write `~/.cursor/mcp.json`.
 4. Codex: copy [`examples/codex.toml.example`](examples/codex.toml.example) into `config.toml`.
+
+Attaching to a running YLune (Docker mount + API register): [deploy/README.md](deploy/README.md) section 3.
+
+You can still `go build` by hand in each module. Day-to-day, use `deploy/pack-*`.
 
 | Server | Credentials you need | How to get them |
 | --- | --- | --- |
@@ -209,6 +223,7 @@ Service READMEs below are Chinese.
 
 | Start here | Then |
 | --- | --- |
+| [Pack / attach to YLune](deploy/README.md) | Linux/Windows default packs; Docker hub mount + register |
 | [Compatible agents](#compatible-agents) | [mcp.json example](examples/mcp.json.example) · [Codex TOML example](examples/codex.toml.example) |
 | [Nightingale: get a token](n9e-mcp-server/README.md#如何拿到夜莺-token) | [Nightingale tools and mcp.json](n9e-mcp-server/README.md) |
 | [Jenkins: user + API token](jenkins-mcp-server/README.md#如何创建-jenkins-只读用户和-api-token) | [Jenkins tools and diagnosis order](jenkins-mcp-server/README.md) |
@@ -222,6 +237,7 @@ Service READMEs below are Chinese.
 n9e-mcp-server/          Nightingale read-only MCP (fork of official n9e MCP)
 jenkins-mcp-server/      Jenkins read-only MCP (trimmed jenkins-mcp-go, MIT)
 postgres-mcp-server/     Multi-target PostgreSQL read-only MCP
+deploy/                  Linux/Windows packs; attach to YLune
 lab/postgres/            Local Docker lab + checklist
 examples/                mcp.json and Codex TOML samples
 .cursor/skills/          Cursor query skills (other clients can restate the same order)

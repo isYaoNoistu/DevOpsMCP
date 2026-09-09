@@ -7,3 +7,6 @@ Thumbs.db
 .idea/
 .vscode/
 lab/postgres/.env
+deploy/.env
+deploy/pgpass
+deploy/dist/

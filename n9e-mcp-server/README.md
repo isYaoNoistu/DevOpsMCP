@@ -103,7 +103,7 @@ go build -o n9e-mcp-server.exe ./cmd/n9e-mcp-server/   # Windows
 ./n9e-mcp-server.exe version
 ```
 
-二进制不入库。改源码后在本机重新 `go build`。
+二进制不入库。日常请用仓库 [deploy/pack-windows.cmd](../deploy/README.md) 或 [deploy/pack-linux.sh](../deploy/README.md)。改源码后重新打包。
 
 ## 本机 MCP 配置
 

@@ -122,24 +122,38 @@ Jenkins、PostgreSQL 没有等价的「值班汇聚台」，所以另外两套 M
 
 ## 快速开始
 
-需要 **Go 1.23+**。二进制不入库，自己编。编一次，WorkBuddy 和 Cursor 共用。
+需要 **Go 1.23+**（没有 Go 时打包脚本会用 Docker 里的 golang 镜像）。二进制不入库。编一次，WorkBuddy 和 Cursor 共用。
 
 ```bash
 git clone https://github.com/isYaoNoistu/DevOpsMCP.git
-cd DevOpsMCP
-
-# Windows
-go build -o n9e-mcp-server/n9e-mcp-server.exe ./n9e-mcp-server/cmd/n9e-mcp-server/
-go build -o jenkins-mcp-server/jenkins-mcp-server.exe ./jenkins-mcp-server/
-go build -o postgres-mcp-server/postgres-mcp-server.exe ./postgres-mcp-server/
-
-# Linux / macOS：去掉 .exe
+cd DevOpsMCP/deploy
 ```
 
-1. 拷贝 `[examples/mcp.json.example](examples/mcp.json.example)`。
-2. 把 `command` 换成**绝对路径**（Windows 指向 `.exe`），把 URL / Token 换成你们环境的。`PG_TARGETS_FILE` 指向本机任意路径的 targets 文件，不必放在 `.cursor` 下。
-3. **WorkBuddy**：粘进 MCP 配置或写入 `~/.workbuddy/mcp.json`。**Cursor**：写入 `~/.cursor/mcp.json`。两边可以指向同一批二进制。
+**Windows（cmd）：**
+
+```bat
+pack-windows.cmd
+```
+
+产物在 `deploy\dist\devopsmcp-windows-amd64\`（三个 `.exe` + 样例）。
+
+**Linux：**
+
+```bash
+chmod +x pack-linux.sh
+./pack-linux.sh
+```
+
+产物在 `deploy/dist/devopsmcp-linux-amd64/`。
+
+1. 打开包里的 `examples/mcp.json.example`（或仓库根目录同一份）。
+2. 把 `command` 换成**该目录里二进制的绝对路径**（Windows 指向 `.exe`），把 URL / Token 换成你们环境的。`PG_TARGETS_FILE` 指向本机任意路径的 targets 文件。
+3. **WorkBuddy**：粘进 MCP 配置或写入 `~/.workbuddy/mcp.json`。**Cursor**：写入 `~/.cursor/mcp.json`。
 4. Codex：按 `[examples/codex.toml.example](examples/codex.toml.example)` 写进 `config.toml`。
+
+接到已经在跑的月弦（Docker 挂载点 + 自动注册）：见 [deploy/README.md](deploy/README.md) 第 3 节，不要用手填三个 STDIO 表单。
+
+也可以仍在各模块目录手敲 `go build`（Windows 带 `.exe`）。日常请走 `deploy/pack-*.`。
 
 
 | 服务         | 你要准备的凭据                          | 怎么拿                                                                                                                                                                           |
@@ -218,7 +232,8 @@ Agent 不得声称已经重跑构建、屏蔽告警、杀掉会话或改过数�
 
 | 先看这个                                                                                      | 再往下                                                                                     |
 | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [适配的智能体](#适配的智能体)                                                                         | [mcp.json 样例](examples/mcp.json.example) · [Codex TOML 样例](examples/codex.toml.example) |
+| [打包 / 接到月弦](deploy/README.md) | Linux / Windows 默认打包；Docker 月弦挂载与自动注册 |
+| [适配的智能体](#适配的智能体) | [mcp.json 样例](examples/mcp.json.example) · [Codex TOML 样例](examples/codex.toml.example) |
 | [夜莺：拿 Token](n9e-mcp-server/README.md#如何拿到夜莺-token)                                       | [夜莺工具表与 mcp.json](n9e-mcp-server/README.md)                                             |
 | [Jenkins：建用户 + API Token](jenkins-mcp-server/README.md#如何创建-jenkins-只读用户和-api-token)      | [Jenkins 工具表与排障顺序](jenkins-mcp-server/README.md)                                        |
 | [PostgreSQL：用 postgres 创建 mcp_ro](postgres-mcp-server/README.md#用-postgres-超级用户创建-mcp_ro) | [targets / pgpass 原理](postgres-mcp-server/docs/configuration.md)                        |
@@ -234,6 +249,7 @@ Agent 不得声称已经重跑构建、屏蔽告警、杀掉会话或改过数�
 n9e-mcp-server/          夜莺只读 MCP（基于 n9e 官方开源 MCP 二开）
 jenkins-mcp-server/      Jenkins 只读 MCP（裁自 jenkins-mcp-go，MIT）
 postgres-mcp-server/     PostgreSQL 多 target 只读 MCP
+deploy/                  Linux / Windows 打包；接到月弦的 attach
 lab/postgres/            本机 Docker 实验室 + 验收清单
 examples/                mcp.json 与 Codex TOML 样例
 .cursor/skills/          Cursor 查询技能（其它客户端可复述同一顺序）

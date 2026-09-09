@@ -1,0 +1,16 @@
+{
+  "targets": [
+    {
+      "name": "app",
+      "aliases": ["default"],
+      "description": "DevOpsMCP attach.sh generated placeholder. Edit host/dbname/user; never add password.",
+      "environment": "dev",
+      "host": "host.docker.internal",
+      "port": 5432,
+      "dbname": "yourdb",
+      "user": "mcp_ro",
+      "sslmode": "disable",
+      "tags": ["generated"]
+    }
+  ]
+}

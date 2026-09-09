@@ -1,0 +1,4 @@
+.env
+pgpass
+*.pgpass
+dist/
