@@ -1,0 +1,36 @@
+{
+  "targets": [
+    {
+      "name": "orders-uat",
+      "aliases": [
+        "orders uat"
+      ],
+      "environment": "uat",
+      "host": "db-uat.example.com",
+      "tags": [
+        "uat"
+      ],
+      "port": 5432,
+      "dbname": "orders",
+      "user": "mcp_ro",
+      "sslmode": "verify-full",
+      "credential_ref": "postgres/orders-uat"
+    },
+    {
+      "name": "orders-prod",
+      "aliases": [
+        "orders prod"
+      ],
+      "environment": "prod",
+      "host": "db-prod.example.com",
+      "tags": [
+        "prod"
+      ],
+      "port": 5432,
+      "dbname": "orders",
+      "user": "mcp_ro",
+      "sslmode": "verify-full",
+      "credential_ref": "postgres/orders-prod"
+    }
+  ]
+}

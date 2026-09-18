@@ -1,0 +1,93 @@
+# targets 中仅 postgres-targets.json 已存在；其余清单需先创建并填写。
+# 多环境方案；与单环境样例择一按需使用。详见 ../CODEX.md。
+# UAT / PROD 使用独立凭据，生产实例默认关闭。
+
+[mcp_servers.nightingale-uat]
+command = "D:/project/CICD/cicd/mcp/n9e-mcp-server/n9e-mcp-server.exe"
+args = ["stdio"]
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+
+[mcp_servers.nightingale-uat.env]
+N9E_BASE_URL = "https://nightingale-uat.example.com"
+N9E_TOKEN = "<nightingale-uat-token>"
+N9E_TOOLSETS = "alerts,targets,datasource,busi_groups,metrics,logs"
+N9E_READ_ONLY = "true"
+N9E_MCP_LOG_LEVEL = "info"
+
+[mcp_servers.nightingale-prod]
+command = "D:/project/CICD/cicd/mcp/n9e-mcp-server/n9e-mcp-server.exe"
+args = ["stdio"]
+enabled = false
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+
+[mcp_servers.nightingale-prod.env]
+N9E_BASE_URL = "https://nightingale-prod.example.com"
+N9E_TOKEN = "<nightingale-prod-token>"
+N9E_TOOLSETS = "alerts,targets,datasource,busi_groups,metrics,logs"
+N9E_READ_ONLY = "true"
+N9E_MCP_LOG_LEVEL = "info"
+
+[mcp_servers.jenkins-uat]
+command = "D:/project/CICD/cicd/mcp/jenkins-mcp-server/jenkins-mcp-server.exe"
+args = []
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+
+[mcp_servers.jenkins-uat.env]
+JENKINS_URL = "https://jenkins-uat.example.com"
+JENKINS_USER = "<readonly-user>"
+JENKINS_API_TOKEN = "<jenkins-uat-token>"
+JENKINS_MCP_TIMEOUT = "90s"
+JENKINS_MCP_CACHE_DIR = "C:/Users/15509/AppData/Local/jenkins-mcp-uat"
+
+[mcp_servers.jenkins-prod]
+command = "D:/project/CICD/cicd/mcp/jenkins-mcp-server/jenkins-mcp-server.exe"
+args = []
+enabled = false
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+
+[mcp_servers.jenkins-prod.env]
+JENKINS_URL = "https://jenkins-prod.example.com"
+JENKINS_USER = "<readonly-user>"
+JENKINS_API_TOKEN = "<jenkins-prod-token>"
+JENKINS_MCP_TIMEOUT = "90s"
+JENKINS_MCP_CACHE_DIR = "C:/Users/15509/AppData/Local/jenkins-mcp-prod"
+
+[mcp_servers.postgres]
+command = "D:/project/CICD/cicd/mcp/postgres-mcp-server/postgres-mcp-server.exe"
+args = []
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+
+[mcp_servers.postgres.env]
+PG_TARGETS_FILE = "C:/Users/15509/.cursor/postgres-targets.json"
+PG_MCP_READ_ONLY = "true"
+
+[mcp_servers.mysql]
+command = "D:/project/CICD/cicd/mcp/mysql-mcp-server/mysql-mcp-server.exe"
+args = []
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+
+[mcp_servers.mysql.env]
+MYSQL_TARGETS_FILE = "C:/Users/15509/.cursor/mysql-targets.json"
+MYSQL_MCP_READ_ONLY = "true"
+
+[mcp_servers.host-logs]
+command = "D:/project/CICD/cicd/mcp/host-logs-mcp-server/host-logs-mcp-server.exe"
+args = []
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+
+[mcp_servers.host-logs.env]
+HOST_LOGS_TARGETS_FILE = "C:/Users/15509/.cursor/host-logs-targets.json"
+HOST_LOGS_READ_ONLY = "true"
+

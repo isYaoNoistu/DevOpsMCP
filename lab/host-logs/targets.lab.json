@@ -1,0 +1,14 @@
+{
+  "targets": [
+    {
+      "name": "mcp-lab-host-logs",
+      "aliases": ["实验室日志", "lab host logs"],
+      "description": "本机夹具，不 SSH。请用 lab/host-logs/scripts/install-local-config.ps1 生成带绝对路径的副本。",
+      "environment": "dev",
+      "host": "local",
+      "transport": "local",
+      "paths": ["/ABS/PATH/DevOpsMCP/lab/host-logs/fixtures"],
+      "tags": ["local", "lab", "postgres"]
+    }
+  ]
+}

@@ -2,6 +2,31 @@ package sqlguard
 
 import "testing"
 
+func TestReadQueryPreservesQuotedSQL(t *testing.T) {
+	for _, sql := range []string{
+		`SELECT 'it''s' AS value`,
+		`SELECT 'a'' OR ''b' AS value`,
+		`SELECT "a""b" FROM t`,
+		`SELECT $tag$it's /* text */ -- text$tag$`,
+		`SELECT E'it\'s -- text'`,
+	} {
+		got, err := CheckReadQuery(sql)
+		if err != nil || got != sql {
+			t.Errorf("query %q became %q: %v", sql, got, err)
+		}
+	}
+	got, err := CheckReadQuery("/* before */ SELECT 'it''s' /* after */ -- end")
+	if err != nil || got != "SELECT 'it''s'" {
+		t.Fatalf("comment removal changed literal: %q, %v", got, err)
+	}
+}
+
+func TestReadQueryRejectsWriteAfterEscapedLiteral(t *testing.T) {
+	if _, err := CheckReadQuery(`SELECT E'it\'s'; DELETE FROM t`); err == nil {
+		t.Fatal("escaped string must not hide a second statement")
+	}
+}
+
 func TestCheckReadQuery_AllowsSelect(t *testing.T) {
 	got, err := CheckReadQuery("SELECT 1")
 	if err != nil {

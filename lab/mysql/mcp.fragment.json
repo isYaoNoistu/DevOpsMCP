@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mysql": {
+      "type": "stdio",
+      "command": "/ABS/PATH/DevOpsMCP/mysql-mcp-server/mysql-mcp-server",
+      "args": [],
+      "env": {
+        "MYSQL_TARGETS_FILE": "/ABS/PATH/.cursor/mysql-targets.lab.json",
+        "MYSQL_MCP_READ_ONLY": "true"
+      }
+    }
+  }
+}

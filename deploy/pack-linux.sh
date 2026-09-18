@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 作用：默认 Linux 打包。编三个 ELF，带无密钥样例，打成 tar.gz
+# 作用：默认 Linux 打包。编五个 ELF，带无密钥样例，打成 tar.gz
 # 运行主机：开发机 / CI / 部署机（Linux、macOS、Git Bash）。有 Go 本机编，否则 docker golang
 # 调用方：人工或 CI。接到月弦请用 attach.sh，不要用本包当容器挂载的唯一入口（也可以 --outdir 指到挂载点）
 # 大概流程：

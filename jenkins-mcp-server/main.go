@@ -74,95 +74,59 @@ func run() error {
 
 	log.Printf("jenkins-mcp %s (read-only)", version)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "health_check",
-		Description: "Probe Jenkins reachability, version, authenticated user, and plugin presence.",
-	}, deps.HealthCheck)
+	mcp.AddTool(srv, tools.ReadOnlyTool("health_check", "Health check",
+		"Probe Jenkins reachability, version, authenticated user, and plugin presence."), deps.HealthCheck)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "list_jobs",
-		Description: "List jobs/folders. folder_path empty = root; recursive + name_filter (RE2) to narrow. Capped at 500.",
-	}, deps.ListJobs)
+	mcp.AddTool(srv, tools.ReadOnlyTool("list_jobs", "List jobs",
+		"List jobs/folders. folder_path empty = root; recursive + name_filter (RE2) to narrow. Capped at 500."), deps.ListJobs)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_build_info",
-		Description: "Build status, duration, parameters, and change set. job_path required; build_number 0 = lastBuild.",
-	}, deps.GetBuildInfo)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_build_info", "Build info",
+		"Build status, duration, parameters, and change set. job_path required; build_number 0 = lastBuild."), deps.GetBuildInfo)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_build_environment",
-		Description: "Cause, parameters (secrets masked), and injected env vars. Do not echo secret values.",
-	}, deps.GetBuildEnvironment)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_build_environment", "Build environment",
+		"Cause, parameters (secrets masked), and injected env vars. Do not echo secret values."), deps.GetBuildEnvironment)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_scm_context",
-		Description: "Commits and touched paths for one build.",
-	}, deps.GetSCMContext)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_scm_context", "SCM context",
+		"Commits and touched paths for one build."), deps.GetSCMContext)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "last_green_build",
-		Description: "Most recent successful build of a job.",
-	}, deps.LastGreenBuild)
+	mcp.AddTool(srv, tools.ReadOnlyTool("last_green_build", "Last green build",
+		"Most recent successful build of a job."), deps.LastGreenBuild)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "changes_since_last_green",
-		Description: "Commits since the job's last successful build.",
-	}, deps.ChangesSinceLastGreen)
+	mcp.AddTool(srv, tools.ReadOnlyTool("changes_since_last_green", "Changes since last green",
+		"Commits since the job's last successful build."), deps.ChangesSinceLastGreen)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "compare_builds",
-		Description: "Diff two builds: result, duration, parameters, SCM, stages, tests.",
-	}, deps.CompareBuilds)
+	mcp.AddTool(srv, tools.ReadOnlyTool("compare_builds", "Compare builds",
+		"Diff two builds: result, duration, parameters, SCM, stages, tests."), deps.CompareBuilds)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_console_log",
-		Description: "Tail console output. Default last 500 lines. Negative tail_lines is rejected; use search_console_log instead of dumping the full log.",
-	}, deps.GetConsoleLog)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_console_log", "Console log",
+		"Tail console output. Default last 500 lines. Negative tail_lines is rejected; use search_console_log instead of dumping the full log."), deps.GetConsoleLog)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "search_console_log",
-		Description: "RE2 search over a build console log with context lines.",
-	}, deps.SearchConsoleLog)
+	mcp.AddTool(srv, tools.ReadOnlyTool("search_console_log", "Search console log",
+		"RE2 search over a build console log with context lines."), deps.SearchConsoleLog)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "tail_running_build",
-		Description: "Incremental console of an in-flight build via progressiveText. Pass Next since_byte to continue.",
-	}, deps.TailRunningBuild)
+	mcp.AddTool(srv, tools.ReadOnlyTool("tail_running_build", "Tail running build",
+		"Incremental console of an in-flight build via progressiveText. Pass Next since_byte to continue."), deps.TailRunningBuild)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_test_report",
-		Description: "JUnit test report for a build, focused on failed cases.",
-	}, deps.GetTestReport)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_test_report", "Test report",
+		"JUnit test report for a build, focused on failed cases."), deps.GetTestReport)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "find_recent_failures",
-		Description: "Survey recent failed builds under a folder. Default since=24h, result_filter=FAILURE.",
-	}, deps.FindRecentFailures)
+	mcp.AddTool(srv, tools.ReadOnlyTool("find_recent_failures", "Recent failures",
+		"Survey recent failed builds under a folder. Default since=24h, result_filter=FAILURE."), deps.FindRecentFailures)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_pipeline_stages",
-		Description: "Pipeline stages with status and duration via /wfapi/describe. Use this before reading the console.",
-	}, deps.GetPipelineStages)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_pipeline_stages", "Pipeline stages",
+		"Pipeline stages with status and duration via /wfapi/describe. Use this before reading the console."), deps.GetPipelineStages)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_stage_log",
-		Description: "One pipeline stage log via wfapi. If empty, fall back to get_console_log / search_console_log.",
-	}, deps.GetStageLog)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_stage_log", "Stage log",
+		"One pipeline stage log via wfapi. If empty, fall back to get_console_log / search_console_log."), deps.GetStageLog)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "list_nodes",
-		Description: "Jenkins agents: online/offline, executors, labels.",
-	}, deps.ListNodes)
+	mcp.AddTool(srv, tools.ReadOnlyTool("list_nodes", "List nodes",
+		"Jenkins agents: online/offline, executors, labels."), deps.ListNodes)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_node",
-		Description: "One node detail. Use \"(built-in)\" or \"(master)\" for the controller.",
-	}, deps.GetNode)
+	mcp.AddTool(srv, tools.ReadOnlyTool("get_node", "Get node",
+		"One node detail. Use \"(built-in)\" or \"(master)\" for the controller."), deps.GetNode)
 
-	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "list_queue",
-		Description: "Pending queue items and block reasons. Optional job_path_prefix.",
-	}, deps.ListQueue)
+	mcp.AddTool(srv, tools.ReadOnlyTool("list_queue", "List queue",
+		"Pending queue items and block reasons. Optional job_path_prefix."), deps.ListQueue)
 
 	return srv.Run(context.Background(), &mcp.StdioTransport{})
 }

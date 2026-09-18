@@ -1,4 +1,4 @@
-# 作用：默认 Windows 打包。编三个 .exe，带无密钥样例，打成 zip
+# 作用：默认 Windows 打包。编五个 .exe，带无密钥样例，打成 zip
 # 运行主机：Windows 开发机 / 构建机。有 Go 本机编，否则 Docker Desktop + golang 镜像
 # 调用方：人工（pack-windows.cmd）或 CI。接到月弦是 Linux 上的 attach.sh
 # 大概流程：

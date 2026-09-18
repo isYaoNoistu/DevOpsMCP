@@ -1,0 +1,28 @@
+# 一次性本机 MySQL，只给 MCP 联调用。数据在 Docker volume 里，与生产无关。
+name: devops-mcp-mysql-lab
+
+services:
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    container_name: ${MYSQL_CONTAINER_NAME:-mysql-mcp-lab}
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-mcp-lab-super}
+      MYSQL_DATABASE: mcp_lab
+    volumes:
+      - mysql_lab_data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --performance-schema=ON
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-mcp-lab-super}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  mysql_lab_data:

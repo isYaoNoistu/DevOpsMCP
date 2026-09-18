@@ -1,0 +1,39 @@
+-- 作用：造一点可观测的表、未使用索引、以及可供阻塞演练的行
+-- 运行主机：容器内，仅 docker-entrypoint 首次初始化时
+
+CREATE TABLE chaos_orders (
+    id           BIGINT PRIMARY KEY,
+    customer_id  INT NOT NULL,
+    amount_cents INT NOT NULL,
+    note         VARCHAR(64),
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE chaos_payments (
+    id       BIGINT PRIMARY KEY,
+    order_id BIGINT NOT NULL,
+    status   VARCHAR(16) NOT NULL,
+    CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES chaos_orders (id)
+);
+
+INSERT INTO chaos_orders (id, customer_id, amount_cents, note)
+SELECT seq, (seq % 50) + 1, 100 + (seq % 900), CONCAT('note-', seq)
+FROM (
+  SELECT 1 + units.i + tens.i * 10 + hundreds.i * 100 AS seq
+  FROM (SELECT 0 i UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9) units
+  CROSS JOIN (SELECT 0 i UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9) tens
+  CROSS JOIN (SELECT 0 i UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6 UNION SELECT 7) hundreds
+) n
+WHERE seq BETWEEN 1 AND 800;
+
+INSERT INTO chaos_payments (id, order_id, status)
+SELECT seq, seq, IF(seq % 7 = 0, 'failed', 'ok')
+FROM (
+  SELECT 1 + units.i + tens.i * 10 + hundreds.i * 100 AS seq
+  FROM (SELECT 0 i UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9) units
+  CROSS JOIN (SELECT 0 i UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9) tens
+  CROSS JOIN (SELECT 0 i UNION SELECT 1) hundreds
+) n
+WHERE seq BETWEEN 1 AND 200;
+
+CREATE INDEX idx_orders_note_unused ON chaos_orders (note);

@@ -126,7 +126,7 @@ func run() error {
 		"Recovery flag, primary WAL LSN or standby receive/replay LSN, pg_stat_wal_receiver, pg_stat_replication, and slots. Do not drop slots from this MCP."), deps.GetReplicationStatus)
 
 	mcp.AddTool(srv, tools.ReadOnlyTool("query_postgres", "Query Postgres",
-		"Controlled read-only escape hatch: one SELECT/WITH, READ ONLY transaction, row/size/timeout limits. Rejects dblink, advisory locks, and quoted-identifier bypasses. Not for EXPLAIN ANALYZE, DML, or DDL."), deps.QueryPostgres)
+		"Controlled read-only escape hatch: one SELECT/WITH, READ ONLY transaction, row/size/timeout limits. Rejects dblink, advisory locks, and quoted-identifier bypasses. Not for EXPLAIN ANALYZE, DML, or DDL. This is a full data-plane read: querying application tables returns those rows (possibly PII). Prefer dedicated diagnostic tools; do not dump large business tables."), deps.QueryPostgres)
 
 	mcp.AddTool(srv, tools.ReadOnlyTool("explain_query", "Explain query",
 		"EXPLAIN (FORMAT JSON) without executing. analyze=true is off by default and forbidden on production targets (environment/tags/name)."), deps.ExplainQuery)

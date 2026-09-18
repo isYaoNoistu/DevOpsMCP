@@ -202,7 +202,7 @@ Nightingale API 原始返回整个业务组规则数组，MCP 在本地切页并
 
 ## 日志工具
 
-日志接口把 `body` 原样转发给 Nightingale 插件。这个 MCP 项目没有定义 Loki、Elasticsearch 或 OpenSearch 的统一请求体 schema，因此以下工具只能保证外层契约。
+日志接口保留 Nightingale 的引擎专用查询字段，但会规范化公共安全字段。当前 `query_logs` 只接受单数键 `body.query` 数组，数组中的每个查询项必须使用 Unix 秒 `start`、`end` 和正整数 `limit`；索引、过滤表达式等字段仍由对应插件解释。目标引擎或版本采用其他时间布局时会明确拒绝。
 
 Elasticsearch 请求体骨架、发现步骤与示例见 [elasticsearch-example.md](elasticsearch-example.md)。字段名、索引前缀以你环境的 `list_log_indices` / `list_log_fields` 为准，不要套用别人的索引。
 
@@ -210,18 +210,17 @@ Elasticsearch 请求体骨架、发现步骤与示例见 [elasticsearch-example.
 
 | 参数 | 类型 | 必需 | 说明 |
 |---|---|---|---|
-| `body` | object | 是 | Nightingale `/api/n9e/logs-query` 原生请求体；ES 根对象含 `cate`、`datasource_id` 和单数键 `query` 数组 |
-| `limit` | integer | 否 | 外层返回条数提示，默认 200 |
-| `start` | integer | 否 | 只用于 MCP 的 7 天跨度校验 |
-| `end` | integer | 否 | 只用于 MCP 的 7 天跨度校验 |
+| `body` | object | 是 | Nightingale `/api/n9e/logs-query` 原生请求体；根对象含 `cate`、`datasource_id` 和单数键 `query` 数组 |
+| `limit` | integer | 否 | 查询条数上限，默认 200，最大 500；会统一写入根级和每个 `body.query[]` 项 |
+| `start` | integer | 否 | 可选 Unix 秒；若提供，必须等于实际 `body.query[]` 的最早 `start` |
+| `end` | integer | 否 | 可选 Unix 秒；若提供，必须等于实际 `body.query[]` 的最晚 `end` |
 
 约束和细节：
 
-- 同时提供外层 `start` 与 `end` 且跨度超过 604800 秒时，工具拒绝查询。
-- 外层 `start`/`end` 不会注入 `body`，所以不能代替引擎请求体中的实际时间范围。
-- MCP 在根级 `body.limit` 缺失时会注入外层 `limit`，但 Nightingale ES 的 `QueryParam` 不读取这个根级字段。ES 的真实限制必须写在 `body.query[].limit`。
-- 返回形状为 `{"limit": N, "data": <Nightingale 插件返回值>}`。
-- 对 ES，把外层 `limit` 与每个 `body.query[].limit` 设为相同值。返回顶层 `limit` 只是 MCP 元数据，不证明上游实际返回了同样数量。
+- 每个查询项和所有查询项合并后的窗口都不得超过 604800 秒；`end` 必须大于 `start`。缺少该布局会在访问上游前明确失败。
+- 实际限制取外层 `limit`、根级 `body.limit`、各 `body.query[].limit` 中最小的正整数，再按最大 500 截断。工具把该值统一写回根级和每个查询项，返回元数据与实际请求一致。
+- 返回形状为 `{"limit": N, "start": S, "end": E, "data": <Nightingale 插件返回值>}`；`start`/`end` 来自实际查询项。
+- 当前校验依据 Nightingale `QueryParam` 的单数 `query` 数组和 Unix 秒 `start`/`end` 布局。ES 示例已确认；Loki/OpenSearch 应先复用目标版本页面实际发出的同布局请求。若目标版本使用其他时间布局，工具会在访问上游前拒绝。
 - ES 查询对象中的 `page` 是从零开始的结果偏移量，不是页码。例如 `limit: 50` 时依次使用 `page: 0`、`page: 50`、`page: 100`。
 
 ### `list_log_indices`

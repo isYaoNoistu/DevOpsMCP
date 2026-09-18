@@ -23,3 +23,27 @@ Licensed under the MIT License (see jenkins-mcp-server/LICENSE).
 
 This tree registers read-only diagnosis tools only. Build/cancel/Groovy
 and full-console-path tools from upstream are not compiled in.
+
+---
+
+mysql-mcp-server uses github.com/go-sql-driver/mysql (Mozilla Public License 2.0)
+https://github.com/go-sql-driver/mysql
+
+Diagnostic queries follow MySQL 8 reference documentation for
+Performance Schema, sys schema, InnoDB locking, and replication tables.
+The Oracle HeatWave/MySQL AI MCP is not vendored here.
+
+---
+
+host-logs-mcp-server is original to this repository. Path allowlisting
+follows the idea of the MCP filesystem reference server (directory
+roots, reject "..", resolve before use). MCP Roots are treated as
+advisory only, not a sandbox. Remote commands are fixed
+find/grep/awk/tail templates with POSIX quoting (OWASP MCP05), not a
+generic SSH exec MCP. Password authentication uses golang.org/x/crypto/ssh;
+OpenSSH BatchMode remains the key-based path. Credentials stay in private
+local configuration and are not returned by target tools.
+
+Go SSH dependencies: golang.org/x/crypto and golang.org/x/sys,
+Copyright The Go Authors, BSD-3-Clause. License texts are distributed in
+host-logs-mcp-server/licenses/.

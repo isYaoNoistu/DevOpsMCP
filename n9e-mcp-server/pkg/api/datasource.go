@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/n9e/n9e-mcp-server/pkg/client"
 	"github.com/n9e/n9e-mcp-server/pkg/toolset"
@@ -68,6 +69,49 @@ type getDatasourceInput struct {
 	Id int64 `json:"id"`
 }
 
+type safeDatasourceView struct {
+	Id             int64    `json:"id"`
+	Name           string   `json:"name"`
+	Identifier     string   `json:"identifier,omitempty"`
+	Description    string   `json:"description,omitempty"`
+	PluginType     string   `json:"plugin_type"`
+	PluginTypeName string   `json:"plugin_type_name,omitempty"`
+	Category       string   `json:"category,omitempty"`
+	ClusterName    string   `json:"cluster_name,omitempty"`
+	Status         string   `json:"status,omitempty"`
+	IsDefault      bool     `json:"is_default"`
+	URL            string   `json:"url,omitempty"`
+	URLs           []string `json:"urls,omitempty"`
+}
+
+func safeDatasource(ds types.Datasource) safeDatasourceView {
+	return safeDatasourceView{Id: ds.Id, Name: ds.Name, Identifier: ds.Identifier, Description: ds.Description,
+		PluginType: ds.PluginType, PluginTypeName: ds.PluginTypeName, Category: ds.Category,
+		ClusterName: ds.ClusterName, Status: ds.Status, IsDefault: ds.IsDefault, URL: safeDatasourceURL(ds.HTTP.Url), URLs: safeDatasourceURLs(ds.HTTP.Urls)}
+}
+
+func safeDatasourceURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	return u.String()
+}
+
+func safeDatasourceURLs(raw []string) []string {
+	clean := make([]string, 0, len(raw))
+	for _, value := range raw {
+		if value = safeDatasourceURL(value); value != "" {
+			clean = append(clean, value)
+		}
+	}
+	return clean
+}
+
 func getDatasourceTool(getClient client.GetClientFunc) toolset.ServerTool {
 	return toolset.NewServerTool(
 		mcp.Tool{
@@ -93,11 +137,11 @@ func getDatasourceTool(getClient client.GetClientFunc) toolset.ServerTool {
 			if c == nil {
 				return toolset.NewToolResultError("failed to get n9e client from context"), nil
 			}
-			result, err := client.DoPost[any](c, ctx, "/api/n9e/datasource/desc", map[string]any{"id": input.Id})
+			result, err := client.DoPost[types.Datasource](c, ctx, "/api/n9e/datasource/desc", map[string]any{"id": input.Id})
 			if err != nil {
 				return toolset.NewToolResultError(err.Error()), nil
 			}
-			return toolset.MarshalResult(result), nil
+			return toolset.MarshalResult(safeDatasource(result)), nil
 		}),
 	)
 }

@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "nightingale": {
+      "type": "stdio",
+      "command": "D:/project/CICD/cicd/mcp/n9e-mcp-server/n9e-mcp-server.exe",
+      "args": ["stdio"],
+      "env": {
+        "N9E_TOKEN": "<nightingale-personal-token>",
+        "N9E_BASE_URL": "http://nightingale.example.com:17000",
+        "N9E_TOOLSETS": "alerts,targets,datasource,busi_groups,metrics,logs",
+        "N9E_READ_ONLY": "true",
+        "N9E_MCP_LOG_LEVEL": "info"
+      }
+    },
+    "host-logs": {
+      "type": "stdio",
+      "command": "D:/project/CICD/cicd/mcp/host-logs-mcp-server/host-logs-mcp-server.exe",
+      "args": [],
+      "env": {
+        "HOST_LOGS_TARGETS_FILE": "C:/Users/15509/.cursor/host-logs-targets.json",
+        "HOST_LOGS_READ_ONLY": "true"
+      }
+    }
+  }
+}

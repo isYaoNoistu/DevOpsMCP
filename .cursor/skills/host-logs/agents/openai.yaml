@@ -1,0 +1,10 @@
+interface:
+  display_name: "主机日志查询"
+  short_description: "查询本机清单中的主机日志：列文件、搜索、看尾部（无 exec）"
+  default_prompt: "使用 $host-logs 解析 target 后只读检索 allowlist 内的日志文件，先 list_log_files 再 search_log。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "host-logs"
+      description: "Read-only host log tools (list/search/tail, no exec)"

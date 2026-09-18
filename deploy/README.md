@@ -9,7 +9,7 @@
 | 在 Linux 上交叉编出 Windows zip | `./pack-windows.sh` |
 | 月弦 Docker 已启动，把 MCP 挂进去并注册 | 先起月弦，再 `./attach.sh` |
 
-编译三个二进制共用 `compile.py`（有 Go 本机编，没有就用 `golang:1.23-bookworm`）。`deploy/dist/` 不进 git。
+编译五个二进制共用 `compile.py`（有 Go 本机编，没有就用 `golang:1.26-bookworm`）。`deploy/dist/` 不进 git。
 
 仓库和 `.env` 里不要写真实 Token、生产密码、内网主机名。
 
@@ -25,7 +25,7 @@ chmod +x pack-linux.sh pack-windows.sh attach.sh
 
 产出：
 
-- `dist/devopsmcp-linux-amd64/` — 三个 ELF + `examples/` + `PACK.txt`
+- `dist/devopsmcp-linux-amd64/` — 五个 ELF + `examples/` + `PACK.txt`
 - `dist/devopsmcp-linux-amd64.tar.gz`
 
 ```bash
@@ -55,7 +55,7 @@ pack-windows.cmd
 .\pack-windows.ps1 -Docker
 ```
 
-产出 `dist/devopsmcp-windows-amd64/`（三个 `.exe`）和 `.zip`。
+产出 `dist/devopsmcp-windows-amd64/`（五个 `.exe`）和 `.zip`。
 
 在 Linux / CI 上交叉编译同样一份 zip：
 
@@ -98,10 +98,12 @@ cp .env.example .env    # Token；REGISTER_* ；改过管理员密码则写 YLUN
 | `REGISTER_NIGHTINGALE` | `true` | 注册 `nightingale`（还要 `N9E_TOKEN`） |
 | `REGISTER_JENKINS` | `true` | 注册 `jenkins`（还要 `JENKINS_API_TOKEN`） |
 | `REGISTER_POSTGRES` | `false` | 写 targets + pgpass，并注册 `postgres` |
+| `REGISTER_MYSQL` | `false` | 写 targets + mysqlpass，并注册 `mysql` |
+| `REGISTER_HOST_LOGS` | `false` | 若挂载目录已有 `host-logs-targets.json` 则注册 `host-logs`。默认关：需要私有主机配置；密码模式无需 ssh/私钥 |
 | `YLUNE_HOME` / `YLUNE_URL` / `MCP_MOUNT_DIR` | 自动找 | 对不上再手填 |
 | `YLUNE_PASSWORD` | 可回落首次 `ADMIN_PASSWORD` | 控制台当前密码 |
 
-同机夜莺 / Jenkins / 库用 `host.docker.internal`，不要 `127.0.0.1`。已有 pg 文件默认不覆盖：`OVERWRITE_PG_CONFIG=true` 才重写。
+同机夜莺 / Jenkins / 库用 `host.docker.internal`，不要 `127.0.0.1`。已有 pg / mysql 文件默认不覆盖：`OVERWRITE_PG_CONFIG=true` / `OVERWRITE_MYSQL_CONFIG=true` 才重写。
 
 ```bash
 ./attach.sh
@@ -121,9 +123,10 @@ cp .env.example .env    # Token；REGISTER_* ；改过管理员密码则写 YLUN
 | `pack-windows.ps1` / `.cmd` | Windows 默认打包 |
 | `pack-windows.sh` | 在 Linux 上打 Windows 包 |
 | `attach.sh` | 写进月弦挂载点并注册 |
-| `register.py` | 找月弦、写 pg 文件、调 API |
+| `register.py` | 找月弦、写 pg / mysql 文件、调 API |
 | `.env.example` | attach 用，复制为 `.env`，勿提交 |
 | `templates/postgres-targets.json` | 文档用样例（attach 按 `.env` 生成） |
+| `templates/mysql-targets.json` | 文档用样例（attach 按 `.env` 生成） |
 
 ---
 
@@ -131,7 +134,8 @@ cp .env.example .env    # Token；REGISTER_* ；改过管理员密码则写 YLUN
 
 | 现象 | 处理 |
 | --- | --- |
-| `need Go 1.23+ or Docker` | 安装 Go，或 Docker 能拉 `golang:1.23-bookworm` |
+| `need Go 1.26+ or Docker` | 安装 Go，或 Docker 能拉 `golang:1.26-bookworm` |
+| `go: command not found`（docker 编译） | 旧脚本用了 `bash -lc`，登录壳会冲掉镜像 PATH。更新 `compile.py` 后再 `./pack-linux.sh`。临时也可：`sed -i 's/"-lc"/"-c"/' compile.py` |
 | 包里是 PE32 / `.exe` 却挂进 Linux 容器 | 用 `pack-linux.sh` 或 `attach.sh`，不要用 Windows 包 |
 | `missing deploy/.env` | 仅 attach 需要；打包脚本不需要 `.env` |
 | 容器没有 `/opt/mcp` | 更新月弦仓后 `docker compose up -d` |
@@ -139,3 +143,7 @@ cp .env.example .env    # Token；REGISTER_* ；改过管理员密码则写 YLUN
 | 普通用户 `/mcp` 没工具 | 还没进组 |
 
 本机不经过月弦、直接 stdio 的字段说明仍看仓库根 README。
+
+## Codex 配置指南
+
+五个服务的添加步骤、TOML 配置、凭据和 UAT / PROD 多环境方案见 [Codex 接入与多环境配置](../CODEX.md)。每个服务 README 都提供可复制的独立配置。

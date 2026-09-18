@@ -25,6 +25,9 @@ type ServerConfig struct {
 }
 
 func NewMCPServer(cfg ServerConfig) (*mcp.Server, error) {
+	if !cfg.ReadOnly {
+		return nil, fmt.Errorf("N9E_READ_ONLY must stay true; this fork will not start with write mode enabled")
+	}
 	n9eClient, err := client.NewClient(cfg.Token, cfg.BaseURL, fmt.Sprintf("n9e-mcp-server/%s", cfg.Version))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create n9e client: %w", err)

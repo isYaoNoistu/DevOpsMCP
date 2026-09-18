@@ -13,8 +13,6 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	"github.com/n9e/n9e-mcp-server/pkg/types"
 )
 
 const (
@@ -253,29 +251,24 @@ func DoGet[T any](c *Client, ctx context.Context, path string, params url.Values
 		return zero, err
 	}
 
-	var resp types.N9eResponse[T]
-	if err := json.Unmarshal(bodyBytes, &resp); err != nil {
-		// Provide detailed error info for diagnosis
-		preview := string(bodyBytes)
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
-		return zero, fmt.Errorf("failed to unmarshal response (check N9E_BASE_URL and N9E_TOKEN): %w, response preview: %s", err, preview)
+	resp, businessErr, err := decodeResponse[T](bodyBytes)
+	if err != nil {
+		return zero, fmt.Errorf("failed to decode response (status %d): %w", httpStatus, err)
 	}
 
 	// Check business error
-	if resp.Err != "" {
+	if businessErr != "" {
 		return zero, &APIError{
 			Method:     "GET",
 			Path:       path,
 			Params:     params,
 			StatusCode: httpStatus,
-			ErrMsg:     resp.Err,
+			ErrMsg:     businessErr,
 			RequestID:  requestID,
 		}
 	}
 
-	return resp.Dat, nil
+	return resp, nil
 }
 
 // DoGetLarge is like DoGet but accepts an explicit response size cap.
@@ -289,27 +282,23 @@ func DoGetLarge[T any](c *Client, ctx context.Context, path string, params url.V
 		return zero, err
 	}
 
-	var resp types.N9eResponse[T]
-	if err := json.Unmarshal(bodyBytes, &resp); err != nil {
-		preview := string(bodyBytes)
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
-		return zero, fmt.Errorf("failed to unmarshal response (check N9E_BASE_URL and N9E_TOKEN): %w, response preview: %s", err, preview)
+	resp, businessErr, err := decodeResponse[T](bodyBytes)
+	if err != nil {
+		return zero, fmt.Errorf("failed to decode response (status %d): %w", httpStatus, err)
 	}
 
-	if resp.Err != "" {
+	if businessErr != "" {
 		return zero, &APIError{
 			Method:     "GET",
 			Path:       path,
 			Params:     params,
 			StatusCode: httpStatus,
-			ErrMsg:     resp.Err,
+			ErrMsg:     businessErr,
 			RequestID:  requestID,
 		}
 	}
 
-	return resp.Dat, nil
+	return resp, nil
 }
 
 // DoPost executes POST request
@@ -321,27 +310,23 @@ func DoPost[T any](c *Client, ctx context.Context, path string, body any) (T, er
 		return zero, err
 	}
 
-	var resp types.N9eResponse[T]
-	if err := json.Unmarshal(bodyBytes, &resp); err != nil {
-		preview := string(bodyBytes)
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
-		return zero, fmt.Errorf("failed to unmarshal response (check N9E_BASE_URL and N9E_TOKEN): %w, response preview: %s", err, preview)
+	resp, businessErr, err := decodeResponse[T](bodyBytes)
+	if err != nil {
+		return zero, fmt.Errorf("failed to decode response (status %d): %w", httpStatus, err)
 	}
 
-	if resp.Err != "" {
+	if businessErr != "" {
 		return zero, &APIError{
 			Method:     "POST",
 			Path:       path,
 			Body:       body,
 			StatusCode: httpStatus,
-			ErrMsg:     resp.Err,
+			ErrMsg:     businessErr,
 			RequestID:  requestID,
 		}
 	}
 
-	return resp.Dat, nil
+	return resp, nil
 }
 
 // DoPut executes PUT request
@@ -353,27 +338,23 @@ func DoPut[T any](c *Client, ctx context.Context, path string, body any) (T, err
 		return zero, err
 	}
 
-	var resp types.N9eResponse[T]
-	if err := json.Unmarshal(bodyBytes, &resp); err != nil {
-		preview := string(bodyBytes)
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
-		return zero, fmt.Errorf("failed to unmarshal response (check N9E_BASE_URL and N9E_TOKEN): %w, response preview: %s", err, preview)
+	resp, businessErr, err := decodeResponse[T](bodyBytes)
+	if err != nil {
+		return zero, fmt.Errorf("failed to decode response (status %d): %w", httpStatus, err)
 	}
 
-	if resp.Err != "" {
+	if businessErr != "" {
 		return zero, &APIError{
 			Method:     "PUT",
 			Path:       path,
 			Body:       body,
 			StatusCode: httpStatus,
-			ErrMsg:     resp.Err,
+			ErrMsg:     businessErr,
 			RequestID:  requestID,
 		}
 	}
 
-	return resp.Dat, nil
+	return resp, nil
 }
 
 // DoDelete executes DELETE request
@@ -385,25 +366,69 @@ func DoDelete[T any](c *Client, ctx context.Context, path string, body any) (T, 
 		return zero, err
 	}
 
-	var resp types.N9eResponse[T]
-	if err := json.Unmarshal(bodyBytes, &resp); err != nil {
-		preview := string(bodyBytes)
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
-		return zero, fmt.Errorf("failed to unmarshal response (check N9E_BASE_URL and N9E_TOKEN): %w, response preview: %s", err, preview)
+	resp, businessErr, err := decodeResponse[T](bodyBytes)
+	if err != nil {
+		return zero, fmt.Errorf("failed to decode response (status %d): %w", httpStatus, err)
 	}
 
-	if resp.Err != "" {
+	if businessErr != "" {
 		return zero, &APIError{
 			Method:     "DELETE",
 			Path:       path,
 			Body:       body,
 			StatusCode: httpStatus,
-			ErrMsg:     resp.Err,
+			ErrMsg:     businessErr,
 			RequestID:  requestID,
 		}
 	}
 
-	return resp.Dat, nil
+	return resp, nil
+}
+
+func decodeResponse[T any](body []byte) (T, string, error) {
+	var zero T
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return zero, "", err
+	}
+	data, present := envelope["data"]
+	errorValue, modernError := envelope["error"]
+	if !present {
+		data, present = envelope["dat"]
+	}
+	if !modernError {
+		errorValue = envelope["err"]
+	}
+	msg, err := responseErrorMessage(errorValue)
+	if err != nil {
+		return zero, "", err
+	}
+	if msg != "" {
+		return zero, msg, nil
+	}
+	if !present {
+		return zero, "", fmt.Errorf("missing data envelope")
+	}
+	var result T
+	if err := json.Unmarshal(data, &result); err != nil {
+		return zero, "", err
+	}
+	return result, msg, nil
+}
+
+func responseErrorMessage(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", nil
+	}
+	var msg string
+	if err := json.Unmarshal(raw, &msg); err == nil {
+		return msg, nil
+	}
+	var object struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil || object.Message == "" {
+		return "", fmt.Errorf("malformed response error envelope")
+	}
+	return object.Message, nil
 }

@@ -79,6 +79,12 @@ try {
     if ($missing.Count -gt 0) { throw "missing required tools: $($missing -join ', ')" }
     if ($leaked.Count -gt 0) { throw "read-only leaked write/extra tools: $($leaked -join ', ')" }
 
+    foreach ($tool in $listed.result.tools) {
+        if (-not $tool.annotations.readOnlyHint) {
+            throw "missing ReadOnlyHint on $($tool.name)"
+        }
+    }
+
     Write-Output "SMOKE_OK"
 }
 finally {

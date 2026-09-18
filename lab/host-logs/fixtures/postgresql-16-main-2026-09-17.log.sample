@@ -1,0 +1,5 @@
+2026-09-17 03:00:00.000 CST [1] LOG:  checkpoint starting
+2026-09-17 05:40:36.891 CST [688365] shop@shop_prod 203.0.113.10(56306) app=shop-web xid=0 vxid=25/64532 LOG:  could not receive data from client: Connection timed out
+2026-09-17 05:40:37.000 CST [688365] shop@shop_prod 203.0.113.10(56306) app=shop-web xid=0 vxid=25/64532 LOG:  unexpected EOF on client connection with an open transaction
+2026-09-17 05:41:02.010 CST [700001] shop@shop_prod 203.0.113.10(56310) app=Navicat xid=0 vxid=25/64540 LOG:  disconnection: session time: 0:01:02.00
+2026-09-17 06:00:00.000 CST [2] LOG:  checkpoint complete

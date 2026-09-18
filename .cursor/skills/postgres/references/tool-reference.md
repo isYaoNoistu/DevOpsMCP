@@ -73,7 +73,7 @@
 | `sql` | 单条 SELECT / WITH，最多约 8000 字符 |
 | `max_rows` | 默认 100，最大 500 |
 
-拒绝：多语句、DML/DDL、`COPY`、`EXPLAIN`、`SET`，以及 `pg_read_file` / `dblink*` / `pg_advisory_lock` 等（含 `"dblink_exec"` 这种带引号写法）。字符串字面量和 dollar-quoted 字符串里的关键字可以通过。带引号的列名如 `"lock"` 可以通过。
+拒绝：多语句、DML/DDL、`COPY`、`EXPLAIN`、`SET`，以及 `pg_read_file` / `dblink*` / `pg_advisory_lock` 等（含 `"dblink_exec"` 这种带引号写法）。字符串字面量和 dollar-quoted 字符串里的关键字可以通过。带引号的列名如 `"lock"` 可以通过。这是数据面只读：查业务表会返回业务行（可能含 PII），不要整表导出。
 
 ### `explain_query`
 

@@ -39,8 +39,10 @@ type junitReport struct {
 type GetTestReportInput struct {
 	JobPath         string `json:"job_path" jsonschema:"Slash-separated job path"`
 	BuildNumber     int64  `json:"build_number,omitempty" jsonschema:"Build number. Use 0 or omit for the latest build."`
-	StackTraceLines int    `json:"stack_trace_lines,omitempty" jsonschema:"Lines of head+tail to show from each failed case's stack trace (default 30 head + 30 tail)"`
+	StackTraceLines int    `json:"stack_trace_lines,omitempty" jsonschema:"Lines of head+tail to show from each failed case's stack trace (default 30 head + 30 tail, max 200 + 200)"`
 }
+
+const maxTestReportStackTraceLines = 200
 
 // HeadTail returns the first n + last n lines of s, joining them with an
 // elision marker when s is longer than 2n lines. Exported because the test
@@ -63,8 +65,14 @@ func (d Deps) GetTestReport(ctx context.Context, _ *mcp.CallToolRequest, in GetT
 		return nil, nil, fmt.Errorf("job_path is required")
 	}
 	stLines := in.StackTraceLines
+	if stLines < 0 {
+		return nil, nil, fmt.Errorf("stack_trace_lines must be >= 0")
+	}
 	if stLines == 0 {
 		stLines = 30
+	}
+	if stLines > maxTestReportStackTraceLines {
+		stLines = maxTestReportStackTraceLines
 	}
 	path := jenkins.JobAPIPath(in.JobPath) + "/" + jenkins.BuildRef(in.BuildNumber) + "/testReport/api/json"
 	body, err := d.Client.Get(ctx, path, nil)

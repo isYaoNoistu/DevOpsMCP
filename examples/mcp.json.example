@@ -2,7 +2,7 @@
   "mcpServers": {
     "nightingale": {
       "type": "stdio",
-      "command": "/ABS/PATH/DevOpsMCP/n9e-mcp-server/n9e-mcp-server",
+      "command": "D:/project/CICD/cicd/mcp/n9e-mcp-server/n9e-mcp-server.exe",
       "args": ["stdio"],
       "env": {
         "N9E_TOKEN": "<nightingale-personal-token>",
@@ -14,7 +14,7 @@
     },
     "jenkins": {
       "type": "stdio",
-      "command": "/ABS/PATH/DevOpsMCP/jenkins-mcp-server/jenkins-mcp-server",
+      "command": "D:/project/CICD/cicd/mcp/jenkins-mcp-server/jenkins-mcp-server.exe",
       "args": [],
       "env": {
         "JENKINS_URL": "https://jenkins.example.com",
@@ -25,11 +25,29 @@
     },
     "postgres": {
       "type": "stdio",
-      "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
+      "command": "D:/project/CICD/cicd/mcp/postgres-mcp-server/postgres-mcp-server.exe",
       "args": [],
       "env": {
-        "PG_TARGETS_FILE": "/ABS/PATH/postgres-targets.json",
+        "PG_TARGETS_FILE": "C:/Users/15509/.cursor/postgres-targets.json",
         "PG_MCP_READ_ONLY": "true"
+      }
+    },
+    "mysql": {
+      "type": "stdio",
+      "command": "D:/project/CICD/cicd/mcp/mysql-mcp-server/mysql-mcp-server.exe",
+      "args": [],
+      "env": {
+        "MYSQL_TARGETS_FILE": "C:/Users/15509/.cursor/mysql-targets.json",
+        "MYSQL_MCP_READ_ONLY": "true"
+      }
+    },
+    "host-logs": {
+      "type": "stdio",
+      "command": "D:/project/CICD/cicd/mcp/host-logs-mcp-server/host-logs-mcp-server.exe",
+      "args": [],
+      "env": {
+        "HOST_LOGS_TARGETS_FILE": "C:/Users/15509/.cursor/host-logs-targets.json",
+        "HOST_LOGS_READ_ONLY": "true"
       }
     }
   }

@@ -87,7 +87,7 @@ Cursor 里命名空间通常是 `user-postgres`；WorkBuddy 等以该产品 MCP 
 | Maintenance | vacuum / 复制 | `get_vacuum_status`、`get_replication_status` |
 | Generic | 受控只读 SQL / 计划 | `query_postgres`、`explain_query` |
 
-未注册、不要调用：任意 `INSERT`/`UPDATE`/`DELETE`/`VACUUM`/`DROP` 类工具。`query_postgres` 只接受单条 `SELECT`/`WITH`，在 `BEGIN READ ONLY` 里执行，有 statement/lock/行数/体积限制。扫描器会检查带引号的标识符（`public."dblink_exec"`）以及 `pg_advisory_lock` / `dblink*` 等有副作用的函数。连接归还池子前会 `DISCARD ALL`，避免会话级锁留在连接上。不要在里面写 `EXPLAIN ANALYZE`；看计划用 `explain_query`（默认不执行 SQL）。生产 target（`environment`/`tags` 为 prod/production/prd，或 name 以 `-prod` / `_prod` 结尾）上 `analyze=true` 会被拒绝。
+未注册、不要调用：任意 `INSERT`/`UPDATE`/`DELETE`/`VACUUM`/`DROP` 类工具。`query_postgres` 只接受单条 `SELECT`/`WITH`，在 `BEGIN READ ONLY` 里执行，有 statement/lock/行数/体积限制。扫描器会检查带引号的标识符（`public."dblink_exec"`）以及 `pg_advisory_lock` / `dblink*` 等有副作用的函数。连接归还池子前会 `DISCARD ALL`，避免会话级锁留在连接上。不要在里面写 `EXPLAIN ANALYZE`；看计划用 `explain_query`（默认不执行 SQL）。生产 target（`environment`/`tags` 为 prod/production/prd，或 name 以 `-prod` / `_prod` 结尾）上 `analyze=true` 会被拒绝。`query_postgres` 是数据面只读：查业务表会返回业务行（可能含 PII）。优先用专用诊断工具，不要整表导出。
 
 `list_targets` / `get_target_info` 每次调用会检查 targets 文件 mtime。JSON 错误、重复 name、缺字段时会向调用方报错，并继续保留上一份成功清单，不会假装已经切库。改文件后下一轮即可看到新库，不用重载 MCP，也不用改客户端配置。删除或改名的 target 会立刻关掉对应连接池。
 
@@ -147,10 +147,10 @@ WorkBuddy 与 Cursor 用同一段 JSON。WorkBuddy 写入 `~/.workbuddy/mcp.json
   "mcpServers": {
     "postgres": {
       "type": "stdio",
-      "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
+      "command": "D:/project/CICD/cicd/mcp/postgres-mcp-server/postgres-mcp-server.exe",
       "args": [],
       "env": {
-        "PG_TARGETS_FILE": "/ABS/PATH/postgres-targets.json",
+        "PG_TARGETS_FILE": "C:/Users/15509/.cursor/postgres-targets.json",
         "PG_MCP_READ_ONLY": "true"
       }
     }
@@ -188,3 +188,28 @@ docs/configuration.md   targets / mcp.json / 密码文件怎么写
 examples/               targets 样例（无密码、无真实主机）
 scripts/                smoke / 写入本机凭据
 ```
+
+## Codex 接入与多环境配置
+
+在用户级 `C:/Users/15509/.codex/config.toml`合并下面配置，替换程序和配置文件的绝对路径，保留原有设置；不要重复定义同名表。
+
+```toml
+[mcp_servers.postgres]
+command = "D:/project/CICD/cicd/mcp/postgres-mcp-server/postgres-mcp-server.exe"
+args = []
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+
+[mcp_servers.postgres.env]
+PG_TARGETS_FILE = "C:/Users/15509/.cursor/postgres-targets.json"
+PG_MCP_READ_ONLY = "true"
+```
+
+一份 targets 清单可列出 UAT / PROD 多个库，每条使用唯一 `name`、环境标识和独立 `credential_ref`。先 `list_targets`，再用明确的 `target` 查询。需要隔离时拆清单并注册两个 MCP 实例。
+
+可复制 [UAT / PROD targets 样例](examples/postgres-targets.multi-env.example.json) 到本机后修改，并让上述 targets 环境变量指向它。数据库密码或 SSH 私钥不写入清单。
+
+保存后重启对应 MCP 连接。CLI 可用 `codex mcp list` 检查配置、在会话中用 `/mcp` 核对连接；握手成功后再做小范围远端只读查询。
+
+添加步骤、字段解释、凭据、环境切换和排障见 [Codex 完整指南](../CODEX.md)；可复制 [五服务 TOML](../examples/codex.toml.example) 或 [多环境 TOML](../examples/codex.multi-env.toml.example)。

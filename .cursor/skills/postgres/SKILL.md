@@ -92,7 +92,7 @@ description: Use when querying PostgreSQL through the postgres MCP tools, includ
 ## 重要边界
 
 - `PG_MCP_READ_ONLY=true` 不是安全的全部。账号本身必须只读。
-- `query_postgres` 会拒绝带引号的 `dblink_exec`、advisory lock 等，不要把它描述成绝对无副作用。
+- `query_postgres` 会拒绝带引号的 `dblink_exec`、advisory lock 等，不要把它描述成绝对无副作用。它会返回你 SELECT 到的业务行（可能含 PII）；优先用专用诊断工具。
 - 改 targets 文件后若 JSON 无效，工具会报错，不会假装已经切到新库。
 - 生产 target 默认 `sslmode=verify-full`，不允许 `prefer`。
 - 本机同时开夜莺 + Jenkins + PostgreSQL 可能超过 Cursor 工具上限。查库时关掉暂不用的 MCP。

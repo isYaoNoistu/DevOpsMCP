@@ -14,7 +14,7 @@
 alerts, targets, datasource, busi_groups, metrics, logs
 ```
 
-`--read-only` 默认为 `true`。MCP 客户端配置再加一层：
+`--read-only` 默认为 `true`。若 `N9E_READ_ONLY=false` 或 `--read-only=false`，进程**拒绝启动**（本 fork 不提供写工具，关闭只读不会变出写能力，只会关掉安全闩）。MCP 客户端配置再加一层：
 
 ```text
 N9E_TOOLSETS=alerts,targets,datasource,busi_groups,metrics,logs
@@ -25,7 +25,7 @@ N9E_READ_ONLY=true
 
 未在对话里明确要求「对夜莺做写操作」时，Agent 不得调用任何写工具。本二进制默认也没有写工具。
 
-`get_datasource` 可能带出鉴权字段，回复里不要原样贴密码或 Token。
+`get_datasource` 只返回明确允许的元数据和已移除 userinfo、查询参数、fragment 的 URL，不返回 auth、headers、TLS 私钥或 settings。
 
 ## 如何拿到夜莺 Token
 
@@ -39,7 +39,7 @@ MCP 用请求头 `X-User-Token` 调夜莺 HTTP API，**不是**登录密码，�
 2. 添加用户：登录名、显示名、密码。不要勾选站点管理员，除非你们没有更细的角色。
 3. 把该用户加进 MCP 需要排查的 **业务组**，并只给查看类权限（能看告警、主机、规则、数据源即可）。不要给改规则、屏蔽、发通知、管用户的权限。
 
-若你们已经用个人账号排查、且权限本身只读，也可以跳过本步，直接用该账号发 Token。权限过大时，Agent 在 UI 里看不到的写入口，API 上仍可能看得到更多数据源配置，`get_datasource` 的回复里不要贴鉴权字段。
+若你们已经用个人账号排查、且权限本身只读，也可以跳过本步，直接用该账号发 Token。权限过大时，Agent 在 UI 里看不到的写入口，API 上仍可能看得到更多数据源配置；MCP 会过滤 `get_datasource` 的敏感配置，但仍应遵循最小权限。
 
 ### 2. 用这个用户创建 Token（该用户自己登录）
 
@@ -82,11 +82,11 @@ Cursor 里命名空间通常是 `user-nightingale`；WorkBuddy 等以该产品 M
 | 查看规则配置 | `get_alert_rule` | 必须已有 `arid`，通常来自告警的 `rule_id` |
 | 搜索主机 / 离线目标 | `list_targets` | `downtime` 单位是秒；`query` 匹配 ident / tags |
 | 列出数据源 | `list_datasources` | 摘要视图，不含鉴权秘密 |
-| 查看一个数据源 | `get_datasource` | 插件类型与 URL；不要把返回里的 Token 贴进回复 |
+| 查看一个数据源 | `get_datasource` | 仅返回白名单元数据和已清理的 URL，不含鉴权配置 |
 | 列出数据源插件类型 | `list_datasource_plugins` | Prometheus、Loki、ES 等 |
 | 查询当前或某时刻指标 | `query_instant` | 必须已有 Prometheus 数据源 ID 和 PromQL |
 | 查询指标趋势 | `query_range` | 时间为 Unix 秒；优先省略 `step` 让工具自动算 |
-| 查询 Loki / ES / OS 日志 | `query_logs` | `body` 必须是夜莺原生 `/logs-query` 结构，禁止臆造字段 |
+| 查询 Loki / ES / OS 日志 | `query_logs` | `body.query[]` 每项必须有 Unix 秒 `start`/`end`；其他时间布局会拒绝；实际 `limit` 默认 200、最大 500 |
 | 发现 ES / OS 索引 | `list_log_indices` | 只适用于 ES / OS；`body` 必须带 `datasource_id` 和 `cate` |
 | 发现 ES / OS 字段 | `list_log_fields` | 先确定索引；OpenSearch 传 `engine: "os"` |
 
@@ -114,7 +114,7 @@ WorkBuddy 与 Cursor 用同一段 JSON（建议带 `"type": "stdio"`）。WorkBu
   "mcpServers": {
     "nightingale": {
       "type": "stdio",
-      "command": "/ABS/PATH/DevOpsMCP/n9e-mcp-server/n9e-mcp-server",
+      "command": "D:/project/CICD/cicd/mcp/n9e-mcp-server/n9e-mcp-server.exe",
       "args": ["stdio"],
       "env": {
         "N9E_TOKEN": "<nightingale-personal-token>",
@@ -130,7 +130,7 @@ WorkBuddy 与 Cursor 用同一段 JSON（建议带 `"type": "stdio"`）。WorkBu
 
 Token 按上一节在夜莺「个人设置 → Token 管理」创建，只放本机 MCP 配置。改配置后在所用客户端里重载或新开对话。
 
-查询日志时，`list_log_indices` / `query_logs` 的 `body` 必须带 `cate`（Elasticsearch 为 `elasticsearch`），只传 `datasource_id` 会返回 `cluster not exists`。
+查询日志时，`list_log_indices` / `query_logs` 的 `body` 必须带 `cate`（Elasticsearch 为 `elasticsearch`），只传 `datasource_id` 会返回 `cluster not exists`。`query_logs` 使用单数键 `body.query` 数组，每项必须带 Unix 秒 `start`/`end`；目标引擎或版本使用其他时间布局时会在访问上游前明确拒绝。外层时间若提供必须与实际窗口一致，条数限制统一规范为默认 200、最大 500。
 
 ## 本机验收
 
@@ -154,3 +154,31 @@ pkg/client/           夜莺 HTTP 客户端
 pkg/toolset/          工具注册与只读开关
 scripts/              本机 smoke / live 验收
 ```
+
+## Codex 接入与多环境配置
+
+在用户级 `C:/Users/15509/.codex/config.toml`合并下面配置，替换程序和配置文件的绝对路径，保留原有设置；不要重复定义同名表。
+
+```toml
+[mcp_servers.nightingale]
+command = "D:/project/CICD/cicd/mcp/n9e-mcp-server/n9e-mcp-server.exe"
+args = ["stdio"]
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 60
+
+[mcp_servers.nightingale.env]
+N9E_BASE_URL = "http://nightingale.example.com:17000"
+N9E_TOKEN = "<nightingale-personal-token>"
+N9E_TOOLSETS = "alerts,targets,datasource,busi_groups,metrics,logs"
+N9E_READ_ONLY = "true"
+N9E_MCP_LOG_LEVEL = "info"
+```
+
+多个独立夜莺环境分别注册 `nightingale-uat` / `nightingale-prod`，每个实例单独设置 URL 和 Token；同一夜莺下的环境用数据源、索引及标签区分。查询先指定实例并 `list_datasources`，不要跨环境复用数据源 ID。
+
+Token 占位符只在本机私有配置中替换；继承环境变量的写法见下方完整指南，不要把真实 Token 提交到仓库。
+
+保存后重启对应 MCP 连接。CLI 可用 `codex mcp list` 检查配置、在会话中用 `/mcp` 核对连接；握手成功后再做小范围远端只读查询。
+
+添加步骤、字段解释、凭据、环境切换和排障见 [Codex 完整指南](../CODEX.md)；可复制 [五服务 TOML](../examples/codex.toml.example) 或 [多环境 TOML](../examples/codex.multi-env.toml.example)。

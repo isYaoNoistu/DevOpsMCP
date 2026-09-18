@@ -1,0 +1,13 @@
+{
+  "targets": [
+    {
+      "name": "orders-prod",
+      "host": "db.example.com",
+      "user": "mcp_logs",
+      "password": "<ssh-password>",
+      "paths": [
+        "/var/log/nginx"
+      ]
+    }
+  ]
+}

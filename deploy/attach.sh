@@ -5,9 +5,10 @@
 # 大概流程：
 # 1) 读 deploy/.env（选哪些服务、Token、可选 YLUNE_*）
 # 2) 查找月弦：YLUNE_HOME → /data/YLuneMCPHub → 同级目录 → 容器 ylune 的 /opt/mcp 挂载
-# 3) compile.py 向挂载目录写入三个 Linux ELF（本机 Go 或 docker golang）
+# 3) compile.py 向挂载目录写入五个 Linux ELF（本机 Go 或 docker golang）
 # 4) 若开启 PostgreSQL：生成 postgres-targets.json + pgpass（已有则默认不覆盖）
-# 5) 登录月弦 API，创建或更新 nightingale / jenkins / postgres
+# 5) 若开启 MySQL：生成 mysql-targets.json + mysqlpass（已有则默认不覆盖）
+# 6) 登录月弦 API，创建或更新 nightingale / jenkins / postgres / mysql / host-logs
 # 勿放密钥：Token 和口令只写 .env / pgpass，不要提交仓库、不要 echo
 
 set -euo pipefail
@@ -19,7 +20,7 @@ usage() {
   cat <<'EOF'
 Usage: ./attach.sh [--build-only | --register-only | --discover]
 
-  (default)     compile Linux binaries into the YLune mount, write PG files if enabled, register
+  (default)     compile Linux binaries into the YLune mount, write PG/MySQL files if enabled, register
   --build-only  compile only
   --register-only  register only (binaries and files must already be on the mount)
   --discover    print where YLune and the mount were found (no secrets)
@@ -96,6 +97,13 @@ write_pg() {
   "$PYTHON" "${HERE}/register.py" --write-pg-files "${extra[@]}"
 }
 
+write_mysql() {
+  is_true "${REGISTER_MYSQL:-false}" || return 0
+  local extra=()
+  is_true "${OVERWRITE_MYSQL_CONFIG:-false}" && extra+=(--overwrite-mysql)
+  "$PYTHON" "${HERE}/register.py" --write-mysql-files "${extra[@]}"
+}
+
 register_all() {
   "$PYTHON" "${HERE}/register.py" --register
 }
@@ -104,14 +112,17 @@ case "$MODE" in
   build )
     build_all
     write_pg
+    write_mysql
     ;;
   register )
     write_pg
+    write_mysql
     register_all
     ;;
   all )
     build_all
     write_pg
+    write_mysql
     register_all
     ;;
 esac

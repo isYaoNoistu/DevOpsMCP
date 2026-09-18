@@ -36,8 +36,8 @@ Loki 不要走索引/字段这两个工具。OpenSearch 传 `engine: "os"`。
 要点：
 
 - 必须带 `cate`。只传 `datasource_id` 常会得到 `cluster not exists`。
-- 外层 MCP 的 `start`/`end` **不会**写入 `body`。查询时间写在 `body.query[]`。
-- ES 真正的条数上限是 `body.query[].limit`，不是根上的 `body.limit`。
+- 查询时间必须写在 `body.query[]`。外层 MCP 的 `start`/`end` 可省略；若提供，必须分别等于查询项的最早 `start` 和最晚 `end`。
+- 工具会把有效 `limit` 统一写入根级和每个 `body.query[].limit`；有效值取各处最小正整数，默认 200、最大 500。ES 实际读取查询项里的限制。
 - `page` 是从 0 开始的偏移（`limit=50` 时下一页 `page=50`），不是页码。
 - 窄窗口优先用精确日索引；日期未知再用通配 `app-logs-*` 这类模式（以你们 ILM 为准）。
 

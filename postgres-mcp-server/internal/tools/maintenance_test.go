@@ -51,6 +51,16 @@ func TestReplicationOverviewSQLHasStandbyFields(t *testing.T) {
 
 func TestWalReceiverSQL(t *testing.T) {
 	sql := walReceiverSQL()
+	// PostgreSQL 12 has received_lsn; 13+ replaced it with written/flushed_lsn.
+	// Optional JSON fields avoid referencing a column absent on either version.
+	for _, want := range []string{"to_jsonb", "'flushed_lsn'", "'received_lsn'", "'written_lsn'", "COALESCE"} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("missing version-compatible receiver field %s", want)
+		}
+	}
+	if strings.Contains(sql, "received_lsn::") {
+		t.Error("received_lsn is not a column on PostgreSQL 13+")
+	}
 	for _, want := range []string{"pg_stat_wal_receiver", "received_lsn", "sender_host"} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("missing %s", want)

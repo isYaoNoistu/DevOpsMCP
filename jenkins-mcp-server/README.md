@@ -73,7 +73,7 @@ curl.exe -sS -u "mcp-readonly:<api-token>" "https://jenkins.example.com/api/json
 
 ## 能力
 
-Cursor 里命名空间通常是 `user-jenkins`；WorkBuddy 等以该产品 MCP 面板里的名字为准。本二进制注册 18 个只读工具。
+Cursor 里命名空间通常是 `user-jenkins`；WorkBuddy 等以该产品 MCP 面板里的名字为准。本二进制注册 18 个只读工具，均声明 `ReadOnlyHint=true`。
 
 | 能力 | 工具 | 说明 |
 | --- | --- | --- |
@@ -119,7 +119,7 @@ WorkBuddy 与 Cursor 用同一段 JSON。WorkBuddy 写入 `~/.workbuddy/mcp.json
   "mcpServers": {
     "jenkins": {
       "type": "stdio",
-      "command": "/ABS/PATH/DevOpsMCP/jenkins-mcp-server/jenkins-mcp-server",
+      "command": "D:/project/CICD/cicd/mcp/jenkins-mcp-server/jenkins-mcp-server.exe",
       "args": [],
       "env": {
         "JENKINS_URL": "https://jenkins.example.com",
@@ -158,3 +158,31 @@ internal/jenkins/     HTTP 客户端与控制台缓存
 internal/tools/       只读排障工具
 scripts/              本机 smoke / live 验收
 ```
+
+## Codex 接入与多环境配置
+
+在用户级 `C:/Users/15509/.codex/config.toml`合并下面配置，替换程序和配置文件的绝对路径，保留原有设置；不要重复定义同名表。
+
+```toml
+[mcp_servers.jenkins]
+command = "D:/project/CICD/cicd/mcp/jenkins-mcp-server/jenkins-mcp-server.exe"
+args = []
+enabled = true
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+
+[mcp_servers.jenkins.env]
+JENKINS_URL = "https://jenkins.example.com"
+JENKINS_USER = "<readonly-user>"
+JENKINS_API_TOKEN = "<jenkins-api-token>"
+JENKINS_MCP_TIMEOUT = "90s"
+JENKINS_MCP_CACHE_DIR = "C:/Users/15509/AppData/Local/jenkins-mcp"
+```
+
+多个 Jenkins 环境分别注册 `jenkins-uat` / `jenkins-prod`，分别设置 URL、只读账号、Token 和独立的 `JENKINS_MCP_CACHE_DIR`；同一 Jenkins 内的环境通过 Folder / Job 路径区分。查询先指定实例并 `list_jobs`。
+
+Token 占位符只在本机私有配置中替换；继承环境变量的写法见下方完整指南，不要把真实 Token 提交到仓库。
+
+保存后重启对应 MCP 连接。CLI 可用 `codex mcp list` 检查配置、在会话中用 `/mcp` 核对连接；握手成功后再做小范围远端只读查询。
+
+添加步骤、字段解释、凭据、环境切换和排障见 [Codex 完整指南](../CODEX.md)；可复制 [五服务 TOML](../examples/codex.toml.example) 或 [多环境 TOML](../examples/codex.multi-env.toml.example)。

@@ -18,11 +18,15 @@ import (
 type recentFailFixture struct {
 	bodies   map[string]string
 	statuses map[string]int
+	handle   func(http.ResponseWriter, *http.Request) bool
 }
 
 func newRecentFailDeps(t *testing.T, f recentFailFixture) (Deps, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if f.handle != nil && f.handle(w, r) {
+			return
+		}
 		if s, ok := f.statuses[r.URL.Path]; ok {
 			w.WriteHeader(s)
 			return
@@ -286,6 +290,46 @@ func TestFindRecentFailures_InvalidSince(t *testing.T) {
 	}
 }
 
+func TestLookbackRejectsNonpositiveAndOverflow(t *testing.T) {
+	for _, value := range []string{"0h", "-1h", "0d", "999999999d"} {
+		if _, err := parseLookback(value); err == nil {
+			t.Errorf("invalid lookback accepted: %s", value)
+		}
+	}
+}
+
+func TestFindRecentFailuresReportsJobListingCap(t *testing.T) {
+	var listing strings.Builder
+	listing.WriteString(`{"jobs":[`)
+	for i := 0; i <= listJobsCap; i++ {
+		if i > 0 {
+			listing.WriteString(",")
+		}
+		fmt.Fprintf(&listing, `{"name":"folder-%d","_class":"com.cloudbees.hudson.plugins.folder.Folder"}`, i)
+	}
+	listing.WriteString("]}")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/json" {
+			_, _ = w.Write([]byte(listing.String()))
+			return
+		}
+		_, _ = w.Write([]byte(`{"jobs":[]}`))
+	}))
+	defer srv.Close()
+	cli, err := jenkins.NewClient(jenkins.Config{BaseURL: srv.URL, User: "u", Token: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, _, err := (Deps{Client: cli}).FindRecentFailures(context.Background(), nil, FindRecentFailuresInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := resultText(t, res)
+	if !strings.Contains(out, "job listing cap") || strings.Contains(out, "(no matches)") {
+		t.Fatalf("incomplete job tree reported as clean scan: %s", out)
+	}
+}
+
 func TestFindRecentFailures_InvalidResultFilter(t *testing.T) {
 	d := Deps{}
 	_, _, err := d.FindRecentFailures(context.Background(), nil, FindRecentFailuresInput{ResultFilter: "BOGUS"})
@@ -294,5 +338,98 @@ func TestFindRecentFailures_InvalidResultFilter(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "result_filter") {
 		t.Errorf("expected error to mention 'result_filter', got: %v", err)
+	}
+}
+
+func TestFindRecentFailuresSurfacesPerJobHTTPFailureAsIncomplete(t *testing.T) {
+	d, srv := newRecentFailDeps(t, recentFailFixture{
+		bodies:   map[string]string{"/api/json": listingTwoJobs("denied")},
+		statuses: map[string]int{"/job/denied/api/json": http.StatusForbidden},
+	})
+	defer srv.Close()
+
+	res, _, err := d.FindRecentFailures(context.Background(), nil, FindRecentFailuresInput{})
+	if err != nil {
+		t.Fatalf("FindRecentFailures: %v", err)
+	}
+	out := resultText(t, res)
+	for _, want := range []string{"scan incomplete", "denied", "HTTP 403"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "  (no matches)\n") {
+		t.Errorf("incomplete scan must not report clean no matches:\n%s", out)
+	}
+}
+
+func TestFindRecentFailuresInspectsMoreThanFiveBuildsWithinWindow(t *testing.T) {
+	now := msNow()
+	pageRequests := 0
+	d, srv := newRecentFailDeps(t, recentFailFixture{
+		bodies: map[string]string{"/api/json": listingTwoJobs("busy")},
+		handle: func(w http.ResponseWriter, r *http.Request) bool {
+			if r.URL.Path != "/job/busy/api/json" {
+				return false
+			}
+			pageRequests++
+			if strings.Contains(r.URL.Query().Get("tree"), "{0,20}") {
+				rows := make([]buildRow, 20)
+				for i := range rows {
+					rows[i] = buildRow{Number: int64(30 - i), Result: "SUCCESS", Timestamp: now - int64(i)*int64(time.Minute/time.Millisecond)}
+				}
+				_, _ = w.Write([]byte(buildsJSON(rows...)))
+			} else {
+				_, _ = w.Write([]byte(buildsJSON(buildRow{Number: 10, Result: "FAILURE", Timestamp: now - int64(20*time.Minute/time.Millisecond)})))
+			}
+			return true
+		},
+	})
+	defer srv.Close()
+
+	res, _, err := d.FindRecentFailures(context.Background(), nil, FindRecentFailuresInput{})
+	if err != nil {
+		t.Fatalf("FindRecentFailures: %v", err)
+	}
+	if out := resultText(t, res); !strings.Contains(out, "#10") {
+		t.Fatalf("expected failure beyond first five builds, got:\n%s", out)
+	}
+	if pageRequests != 2 {
+		t.Fatalf("got %d build page requests, want 2", pageRequests)
+	}
+}
+
+func TestFindRecentFailuresReportsPerJobBuildScanCap(t *testing.T) {
+	now := msNow()
+	pageRequests := 0
+	d, srv := newRecentFailDeps(t, recentFailFixture{
+		bodies: map[string]string{"/api/json": listingTwoJobs("busy")},
+		handle: func(w http.ResponseWriter, r *http.Request) bool {
+			if r.URL.Path != "/job/busy/api/json" {
+				return false
+			}
+			pageRequests++
+			rows := make([]buildRow, 20)
+			for i := range rows {
+				rows[i] = buildRow{Number: int64(1000 - i), Result: "SUCCESS", Timestamp: now - int64(i)*int64(time.Minute/time.Millisecond)}
+			}
+			_, _ = w.Write([]byte(buildsJSON(rows...)))
+			return true
+		},
+	})
+	defer srv.Close()
+
+	res, _, err := d.FindRecentFailures(context.Background(), nil, FindRecentFailuresInput{})
+	if err != nil {
+		t.Fatalf("FindRecentFailures: %v", err)
+	}
+	out := resultText(t, res)
+	for _, want := range []string{"scan incomplete", "busy", "build scan cap"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output:\n%s", want, out)
+		}
+	}
+	if pageRequests != 5 {
+		t.Fatalf("got %d build page requests at cap, want 5", pageRequests)
 	}
 }

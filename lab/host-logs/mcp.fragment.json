@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "host-logs": {
+      "type": "stdio",
+      "command": "/ABS/PATH/DevOpsMCP/host-logs-mcp-server/host-logs-mcp-server",
+      "args": [],
+      "env": {
+        "HOST_LOGS_TARGETS_FILE": "/ABS/PATH/.cursor/host-logs-targets.lab.json",
+        "HOST_LOGS_READ_ONLY": "true"
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the three DevOpsMCP stdio binaries (Linux ELF or Windows exe).
+"""Compile the DevOpsMCP stdio binaries (Linux ELF or Windows exe).
 
 Used by pack-linux.sh, pack-windows.ps1 / pack-windows.sh, and attach.sh.
 Does not print tokens. Does not wipe extra files already in --out (pgpass etc.).
@@ -23,9 +23,11 @@ MODULES = (
     ("n9e-mcp-server", "n9e-mcp-server", ["./cmd/n9e-mcp-server/"]),
     ("jenkins-mcp-server", "jenkins-mcp-server", ["."]),
     ("postgres-mcp-server", "postgres-mcp-server", ["."]),
+    ("mysql-mcp-server", "mysql-mcp-server", ["."]),
+    ("host-logs-mcp-server", "host-logs-mcp-server", ["."]),
 )
 
-PACK_TXT = """DevOpsMCP stdio binaries (read-only Nightingale / Jenkins / PostgreSQL)
+PACK_TXT = """DevOpsMCP stdio binaries (read-only Nightingale / Jenkins / PostgreSQL / MySQL / host logs)
 
 This folder is a build output. Put it anywhere; do not commit it.
 
@@ -35,6 +37,12 @@ This folder is a build output. Put it anywhere; do not commit it.
 3. PostgreSQL: copy examples/postgres-targets.example.json, remove any password
    field, point PG_TARGETS_FILE at that file. Put the password in pgpass /
    Credential Manager.
+4. MySQL: copy examples/mysql-targets.example.json, remove any password field,
+   point MYSQL_TARGETS_FILE at that file. Put the password in mysqlpass /
+   Credential Manager.
+5. Host logs: copy examples/host-logs-targets.example.json, fill host/user/
+   password/paths in your private local copy, and set HOST_LOGS_TARGETS_FILE.
+   No separate key file is needed. Existing SSH key configurations still work.
 
 Same-host URLs for a Docker hub: host.docker.internal, not 127.0.0.1.
 
@@ -82,18 +90,25 @@ def compile_native(out: Path, goos: str, goarch: str) -> None:
 
 
 def compile_docker(out: Path, goos: str, goarch: str) -> None:
-    image = env_get("GO_IMAGE", "golang:1.23-bookworm") or "golang:1.23-bookworm"
+    image = env_get("GO_IMAGE", "golang:1.26-bookworm") or "golang:1.26-bookworm"
     proxy = env_get("GOPROXY", "https://proxy.golang.org,direct")
     out.mkdir(parents=True, exist_ok=True)
+    # bash -l 会读 Debian /etc/profile，把镜像 ENV 里的 /usr/local/go/bin 从 PATH 清掉。
     inner = """
 set -euo pipefail
+export PATH="/usr/local/go/bin:/go/bin:${{PATH:-/usr/bin:/bin}}"
+command -v go >/dev/null
 cd /src/n9e-mcp-server && go build -o /out/{n9e} ./cmd/n9e-mcp-server/
 cd /src/jenkins-mcp-server && go build -o /out/{jenkins} .
 cd /src/postgres-mcp-server && go build -o /out/{pg} .
+cd /src/mysql-mcp-server && go build -o /out/{mysql} .
+cd /src/host-logs-mcp-server && go build -o /out/{hostlogs} .
 """.format(
         n9e=binary_name("n9e-mcp-server", goos),
         jenkins=binary_name("jenkins-mcp-server", goos),
         pg=binary_name("postgres-mcp-server", goos),
+        mysql=binary_name("mysql-mcp-server", goos),
+        hostlogs=binary_name("host-logs-mcp-server", goos),
     )
     cmd = [
         "docker",
@@ -115,7 +130,7 @@ cd /src/postgres-mcp-server && go build -o /out/{pg} .
         "/src",
         image,
         "bash",
-        "-lc",
+        "-c",
         inner,
     ]
     run(cmd)
@@ -129,10 +144,16 @@ def copy_examples(out: Path) -> None:
         REPO / "examples" / "mcp.json.example",
         REPO / "examples" / "codex.toml.example",
         REPO / "postgres-mcp-server" / "examples" / "postgres-targets.example.json",
+        REPO / "mysql-mcp-server" / "examples" / "mysql-targets.example.json",
+        REPO / "host-logs-mcp-server" / "examples" / "host-logs-targets.example.json",
     ]
     for src in files:
         if src.is_file():
             shutil.copy2(src, dest / src.name)
+    for name in ("LICENSE", "NOTICE"):
+        shutil.copy2(REPO / name, out / name)
+    license_source = REPO / "host-logs-mcp-server" / "licenses"
+    shutil.copytree(license_source, out / "host-logs-mcp-server" / "licenses", dirs_exist_ok=True)
     (out / "PACK.txt").write_text(PACK_TXT, encoding="utf-8")
 
 
@@ -150,7 +171,7 @@ def compile(out: Path, goos: str, goarch: str, bins_only: bool, force_docker: bo
     use_docker = force_docker or not have_go()
     if use_docker:
         if not have_docker():
-            raise SystemExit("need Go 1.23+ or Docker to compile")
+            raise SystemExit("need Go 1.26+ or Docker to compile")
         compile_docker(out, goos, goarch)
     else:
         compile_native(out, goos, goarch)

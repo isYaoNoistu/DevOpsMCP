@@ -1,0 +1,22 @@
+{
+  "targets": [
+    {
+      "name": "orders-uat",
+      "host": "logs-uat.example.com",
+      "user": "mcp_logs",
+      "password": "<uat-ssh-password>",
+      "paths": [
+        "/var/log/nginx"
+      ]
+    },
+    {
+      "name": "orders-prod",
+      "host": "logs-prod.example.com",
+      "user": "mcp_logs",
+      "password": "<prod-ssh-password>",
+      "paths": [
+        "/var/log/nginx"
+      ]
+    }
+  ]
+}

@@ -129,14 +129,18 @@ SELECT pg_is_in_recovery() AS in_recovery,
 }
 
 func walReceiverSQL() string {
+	// PG 13 split received_lsn into written_lsn and flushed_lsn. JSON lookup
+	// keeps the query valid on both schemas; the old output name means flushed.
 	return `
 SELECT pid, status,
        receive_start_lsn::text AS receive_start_lsn,
-       received_lsn::text AS received_lsn,
+       COALESCE(to_jsonb(r)->>'flushed_lsn', to_jsonb(r)->>'received_lsn') AS received_lsn,
+       to_jsonb(r)->>'written_lsn' AS written_lsn,
+       COALESCE(to_jsonb(r)->>'flushed_lsn', to_jsonb(r)->>'received_lsn') AS flushed_lsn,
        latest_end_lsn::text AS latest_end_lsn,
        last_msg_send_time, last_msg_receipt_time, latest_end_time,
        slot_name, sender_host, sender_port
-FROM pg_stat_wal_receiver
+FROM pg_stat_wal_receiver r
 `
 }
 

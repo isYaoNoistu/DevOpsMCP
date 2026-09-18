@@ -1,5 +1,7 @@
 # PostgreSQL MCP 配置与凭据
 
+Codex 用户请先看服务 README 的「Codex 接入与多环境配置」及 [完整指南](../../CODEX.md)。Codex 使用 `config.toml`，下文 `mcp.json` 示例用于 Cursor / WorkBuddy；targets 与凭据格式通用。多环境 targets 示例见服务 `examples/` 目录。
+
 本文说明三份本机文件怎么写、密码放哪、MCP 怎么找到密码。示例主机和口令都是占位或一次性实验室值，不要换成你们生产地址后提交回仓库。
 
 相关文件：
@@ -47,10 +49,10 @@ WorkBuddy 与 Cursor 用同一段 JSON（建议 `"type": "stdio"`）。完整客
   "mcpServers": {
     "postgres": {
       "type": "stdio",
-      "command": "/ABS/PATH/DevOpsMCP/postgres-mcp-server/postgres-mcp-server",
+      "command": "D:/project/CICD/cicd/mcp/postgres-mcp-server/postgres-mcp-server.exe",
       "args": [],
       "env": {
-        "PG_TARGETS_FILE": "/ABS/PATH/postgres-targets.json",
+        "PG_TARGETS_FILE": "C:/Users/15509/.cursor/postgres-targets.json",
         "PG_MCP_READ_ONLY": "true"
       }
     }

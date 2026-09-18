@@ -67,8 +67,8 @@ description: Use when querying Nightingale monitoring data through the nightinga
 
 1. 先 `list_datasources` 确认引擎和 ID，不要猜测。ES/OS 不确定索引时 `list_log_indices`，不确定字段时 `list_log_fields`。Loki 不使用这两个工具。
 2. `query_logs.body` 必须是目标 Nightingale 版本实际接受的 `/api/n9e/logs-query` 请求体。优先复用已验证结构或夜莺页面网络请求，不要把某一引擎的格式套到另一引擎。
-3. 外层 `start`、`end` 只用于检查是否超过 7 天，不会写入 `body`。实际查询时间必须同时写入 `body.query[]`。
-4. 对 Elasticsearch，实际命中条数上限位于 `body.query[].limit`。从 5 至 30 分钟的窄窗口和具体服务、主机、trace ID 或错误词开始。
+3. 当前工具只接受单数键 `body.query` 数组，且每个查询项必须带 Unix 秒 `start`、`end`。工具从这些实际字段校验最多 7 天；若还传外层 `start`、`end`，必须与实际查询窗口一致。
+4. 工具把外层、根级和各查询项中最小的正整数 `limit` 作为实际限制，默认 200、最大 500，并统一写回根级和每个 `body.query[].limit`。从 5 至 30 分钟的窄窗口和具体服务、主机、trace ID 或错误词开始。
 
 ## 效率规则
 
@@ -85,7 +85,7 @@ description: Use when querying Nightingale monitoring data through the nightinga
 - 当前实现会省略历史查询中的 `is_recovered: 0`，因此不能可靠地用它筛选“未恢复历史告警”。
 - `list_alert_rules` 必须已有 `group_id`；可先用 `list_busi_groups`。
 - 空列表或空向量只表示该查询没有匹配数据，不等于系统健康。
-- `query_logs` 对引擎请求体不做结构校验；调用成功也不代表查询条件符合用户意图。
+- `query_logs` 校验 `body.query[]` 中 Unix 秒 `start`/`end` 和 `limit` 安全边界，不校验索引、过滤表达式等引擎专用字段；调用成功也不代表查询条件符合用户意图。目标引擎或版本若使用其他时间布局，工具会明确拒绝，不要伪造字段绕过。
 
 ## 回复规范
 

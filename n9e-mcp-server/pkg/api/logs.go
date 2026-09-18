@@ -13,6 +13,7 @@ import (
 
 // defaultLogLimit caps the number of log lines returned per query.
 const defaultLogLimit = 200
+const maxLogLimit = 500
 
 // maxLogRangeSeconds rejects log queries spanning more than 7 days to prevent runaway costs.
 const maxLogRangeSeconds = 7 * 24 * 60 * 60
@@ -38,11 +39,106 @@ type queryLogsInput struct {
 	End   int64          `json:"end,omitempty"`
 }
 
+type logQueryMeta struct {
+	Limit int   `json:"limit"`
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
+}
+
+func prepareLogQuery(body map[string]any, requestedLimit int) (map[string]any, logQueryMeta, error) {
+	limit := requestedLimit
+	if limit <= 0 {
+		limit = defaultLogLimit
+	}
+	if limit > maxLogLimit {
+		limit = maxLogLimit
+	}
+	if bodyLimit, ok := positiveInt(body["limit"]); ok && bodyLimit < limit {
+		limit = bodyLimit
+	}
+	rawQueries, ok := body["query"].([]any)
+	if !ok || len(rawQueries) == 0 {
+		return nil, logQueryMeta{}, fmt.Errorf("body.query must be a non-empty array")
+	}
+	for i, raw := range rawQueries {
+		query, ok := raw.(map[string]any)
+		if !ok {
+			return nil, logQueryMeta{}, fmt.Errorf("body.query[%d] must be an object", i)
+		}
+		if queryLimit, ok := positiveInt(query["limit"]); ok && queryLimit < limit {
+			limit = queryLimit
+		}
+	}
+	copyBody := make(map[string]any, len(body))
+	for k, v := range body {
+		copyBody[k] = v
+	}
+	queries := make([]any, len(rawQueries))
+	meta := logQueryMeta{Limit: limit}
+	for i, raw := range rawQueries {
+		query, ok := raw.(map[string]any)
+		if !ok {
+			return nil, logQueryMeta{}, fmt.Errorf("body.query[%d] must be an object", i)
+		}
+		start, startOK := integerField(query["start"])
+		end, endOK := integerField(query["end"])
+		if !startOK || !endOK {
+			return nil, logQueryMeta{}, fmt.Errorf("body.query[%d] must use supported Unix-second start/end fields", i)
+		}
+		if start <= 0 || end <= start {
+			return nil, logQueryMeta{}, fmt.Errorf("body.query[%d] has invalid start/end", i)
+		}
+		if end-start > maxLogRangeSeconds {
+			return nil, logQueryMeta{}, fmt.Errorf("time range exceeds max of %d seconds (~7 days)", maxLogRangeSeconds)
+		}
+		if i == 0 || start < meta.Start {
+			meta.Start = start
+		}
+		if end > meta.End {
+			meta.End = end
+		}
+		qcopy := make(map[string]any, len(query)+1)
+		for k, v := range query {
+			qcopy[k] = v
+		}
+		qcopy["limit"] = limit
+		queries[i] = qcopy
+	}
+	if meta.End-meta.Start > maxLogRangeSeconds {
+		return nil, logQueryMeta{}, fmt.Errorf("combined time range exceeds max of %d seconds (~7 days)", maxLogRangeSeconds)
+	}
+	copyBody["query"] = queries
+	copyBody["limit"] = limit
+	return copyBody, meta, nil
+}
+
+func positiveInt(value any) (int, bool) {
+	v, ok := integerField(value)
+	if !ok || v <= 0 || v > int64(^uint(0)>>1) {
+		return 0, false
+	}
+	return int(v), true
+}
+
+func integerField(value any) (int64, bool) {
+	switch v := value.(type) {
+	case int64:
+		return v, true
+	case int:
+		return int64(v), true
+	case float64:
+		if v == float64(int64(v)) {
+			return int64(v), true
+		}
+	}
+	return 0, false
+}
+
 func queryLogsTool(getClient client.GetClientFunc) toolset.ServerTool {
 	return toolset.NewServerTool(
 		mcp.Tool{
 			Name:        "query_logs",
-			Description: "Query logs from a datasource (Loki/ES/OS) via n9e's plugin-dispatched /logs-query endpoint. Pass 'body' as the n9e query payload (must include datasource_id and the engine-specific query). Time range > 7 days is rejected.",
+			Description: "Query logs via n9e's plugin-dispatched /logs-query endpoint when the native body.query items use Unix-second start/end fields. Unrecognized time layouts are rejected explicitly. Each query is capped at 500 lines and time range > 7 days is rejected.",
 			Annotations: &mcp.ToolAnnotations{
 				Title:        "Query Logs",
 				ReadOnlyHint: true,
@@ -52,9 +148,9 @@ func queryLogsTool(getClient client.GetClientFunc) toolset.ServerTool {
 				Required: []string{"body"},
 				Properties: map[string]*jsonschema.Schema{
 					"body":  {Type: "object", Description: "Log query body (matches n9e's /logs-query payload)"},
-					"limit": {Type: "integer", Description: "Cap on returned lines (default 200)"},
-					"start": {Type: "integer", Description: "Optional Unix-second start (used only for range validation)"},
-					"end":   {Type: "integer", Description: "Optional Unix-second end (used only for range validation)"},
+					"limit": {Type: "integer", Description: "Cap applied to every body.query item (default 200, max 500)"},
+					"start": {Type: "integer", Description: "Optional Unix-second start; if provided, must match the actual body query window"},
+					"end":   {Type: "integer", Description: "Optional Unix-second end; if provided, must match the actual body query window"},
 				},
 			},
 		},
@@ -62,20 +158,12 @@ func queryLogsTool(getClient client.GetClientFunc) toolset.ServerTool {
 			if len(input.Body) == 0 {
 				return toolset.NewToolResultError("body is required"), nil
 			}
-			if input.Start > 0 && input.End > 0 {
-				if input.End-input.Start > maxLogRangeSeconds {
-					return toolset.NewToolResultError(fmt.Sprintf("time range exceeds max of %d seconds (~7 days)", maxLogRangeSeconds)), nil
-				}
+			body, meta, err := prepareLogQuery(input.Body, input.Limit)
+			if err != nil {
+				return toolset.NewToolResultError(err.Error()), nil
 			}
-
-			body := input.Body
-			limit := input.Limit
-			if limit <= 0 {
-				limit = defaultLogLimit
-			}
-			// Inject limit if the caller didn't set one (n9e plugins inspect this hint differently).
-			if _, ok := body["limit"]; !ok {
-				body["limit"] = limit
+			if (input.Start > 0 && input.Start != meta.Start) || (input.End > 0 && input.End != meta.End) {
+				return toolset.NewToolResultError("outer start/end must match the actual body query window"), nil
 			}
 
 			c := getClient(ctx)
@@ -87,7 +175,9 @@ func queryLogsTool(getClient client.GetClientFunc) toolset.ServerTool {
 				return toolset.NewToolResultError(err.Error()), nil
 			}
 			return toolset.MarshalResult(map[string]any{
-				"limit": limit,
+				"limit": meta.Limit,
+				"start": meta.Start,
+				"end":   meta.End,
 				"data":  result,
 			}), nil
 		}),

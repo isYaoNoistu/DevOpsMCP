@@ -38,23 +38,23 @@ var forbiddenFuncs = map[string]struct{}{
 	"LO_IMPORT": {}, "LO_EXPORT": {}, "LO_UNLINK": {}, "LO_CREATE": {}, "LO_PUT": {},
 	"DBLINK": {}, "DBLINK_EXEC": {}, "DBLINK_CONNECT": {}, "DBLINK_CONNECT_U": {},
 	"DBLINK_DISCONNECT": {},
-	"PG_ADVISORY_LOCK": {}, "PG_ADVISORY_LOCK_SHARED": {},
+	"PG_ADVISORY_LOCK":  {}, "PG_ADVISORY_LOCK_SHARED": {},
 	"PG_TRY_ADVISORY_LOCK": {}, "PG_TRY_ADVISORY_LOCK_SHARED": {},
 	"PG_ADVISORY_UNLOCK": {}, "PG_ADVISORY_UNLOCK_SHARED": {},
 	"PG_ADVISORY_UNLOCK_ALL": {},
-	"PG_ADVISORY_XACT_LOCK": {}, "PG_ADVISORY_XACT_LOCK_SHARED": {},
+	"PG_ADVISORY_XACT_LOCK":  {}, "PG_ADVISORY_XACT_LOCK_SHARED": {},
 	"PG_TRY_ADVISORY_XACT_LOCK": {}, "PG_TRY_ADVISORY_XACT_LOCK_SHARED": {},
 	"PG_TERMINATE_BACKEND": {}, "PG_CANCEL_BACKEND": {},
 	"PG_RELOAD_CONF": {}, "PG_ROTATE_LOGFILE": {}, "PG_PROMOTE": {},
-	"SET_CONFIG": {},
+	"SET_CONFIG":    {},
 	"PG_STAT_RESET": {}, "PG_STAT_RESET_SHARED": {},
-	"PG_STAT_STATEMENTS_RESET": {},
-	"PG_STAT_RESET_SINGLE_TABLE_COUNTERS": {},
+	"PG_STAT_STATEMENTS_RESET":               {},
+	"PG_STAT_RESET_SINGLE_TABLE_COUNTERS":    {},
 	"PG_STAT_RESET_SINGLE_FUNCTION_COUNTERS": {},
-	"PG_CREATE_PHYSICAL_REPLICATION_SLOT": {},
-	"PG_CREATE_LOGICAL_REPLICATION_SLOT": {},
-	"PG_DROP_REPLICATION_SLOT": {},
-	"PG_REPLICATION_ORIGIN_ADVANCE": {}, "PG_REPLICATION_ORIGIN_DROP": {},
+	"PG_CREATE_PHYSICAL_REPLICATION_SLOT":    {},
+	"PG_CREATE_LOGICAL_REPLICATION_SLOT":     {},
+	"PG_DROP_REPLICATION_SLOT":               {},
+	"PG_REPLICATION_ORIGIN_ADVANCE":          {}, "PG_REPLICATION_ORIGIN_DROP": {},
 	"PG_SWITCH_WAL": {}, "PG_BACKUP_START": {}, "PG_BACKUP_STOP": {},
 	"PG_WAL_REPLAY_PAUSE": {}, "PG_WAL_REPLAY_RESUME": {},
 	"PG_LOG_BACKEND_MEMORY_CONTEXTS": {},
@@ -128,20 +128,25 @@ func rejectMultiStatement(sql string) error {
 
 func stripComments(sql string) (string, error) {
 	var b strings.Builder
-	err := scanSQL(sql, func(kind rune, text string, _ int) error {
+	cursor := 0
+	err := scanSQL(sql, func(kind rune, text string, i int) error {
 		switch kind {
-		case '-':
-			b.WriteByte('\n')
-		case '/':
-			b.WriteByte(' ')
-		default:
-			b.WriteString(text)
+		case '-', '/':
+			// Copy original spans: decoded quoted tokens must never become SQL.
+			b.WriteString(sql[cursor:i])
+			if kind == '-' || strings.ContainsAny(text, "\r\n") {
+				b.WriteByte('\n')
+			} else {
+				b.WriteByte(' ')
+			}
+			cursor = i + len(text)
 		}
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
+	b.WriteString(sql[cursor:])
 	return b.String(), nil
 }
 
@@ -180,19 +185,20 @@ func scanWords(sql string) ([]ident, error) {
 	return words, err
 }
 
-// scanSQL walks SQL with PostgreSQL-ish quoting: ', '', ", "", $tag$...$tag$.
+// scanSQL walks SQL with PostgreSQL-ish quoting: ', '', E'...', ", "", $tag$...$tag$.
 // Callback kinds:
 //
 //	'i'  identifier fragment (unquoted run) — not used; raw chars come as kind 0
 //	'"'  quoted identifier content
 //	'\'' string literal (skipped)
 //	'$'  dollar-quoted string (skipped)
-//	'-'  line comment
-//	'/'  block comment
+//	'-'  original line comment text and its starting offset
+//	'/'  original block comment text and its starting offset
 //	';'  semicolon at i
 //	0    raw character in text
 func scanSQL(sql string, emit func(kind rune, text string, i int) error) error {
 	inSingle, inDouble, inDollar := false, false, false
+	escapeString := false
 	var dollarTag string
 	var q strings.Builder
 	for i := 0; i < len(sql); i++ {
@@ -215,6 +221,11 @@ func scanSQL(sql string, emit func(kind rune, text string, i int) error) error {
 			continue
 		}
 		if inSingle {
+			if escapeString && c == '\\' && i+1 < len(sql) {
+				q.WriteByte(sql[i+1])
+				i++
+				continue
+			}
 			if c == '\'' {
 				if i+1 < len(sql) && sql[i+1] == '\'' {
 					q.WriteByte('\'')
@@ -259,6 +270,7 @@ func scanSQL(sql string, emit func(kind rune, text string, i int) error) error {
 				return err
 			}
 			inSingle = true
+			escapeString = i > 0 && (sql[i-1] == 'E' || sql[i-1] == 'e') && (i < 2 || !isIdentPart(sql[i-2]))
 			q.Reset()
 			continue
 		}
@@ -284,15 +296,17 @@ func scanSQL(sql string, emit func(kind rune, text string, i int) error) error {
 			}
 		}
 		if c == '-' && i+1 < len(sql) && sql[i+1] == '-' {
+			start := i
 			for i < len(sql) && sql[i] != '\n' {
 				i++
 			}
-			if err := emit('-', "", i); err != nil {
+			if err := emit('-', sql[start:i], start); err != nil {
 				return err
 			}
 			continue
 		}
 		if c == '/' && i+1 < len(sql) && sql[i+1] == '*' {
+			start := i
 			i += 2
 			for i+1 < len(sql) && !(sql[i] == '*' && sql[i+1] == '/') {
 				i++
@@ -301,7 +315,7 @@ func scanSQL(sql string, emit func(kind rune, text string, i int) error) error {
 				return fmt.Errorf("unclosed block comment")
 			}
 			i++
-			if err := emit('/', "", i); err != nil {
+			if err := emit('/', sql[start:i+1], start); err != nil {
 				return err
 			}
 			continue
