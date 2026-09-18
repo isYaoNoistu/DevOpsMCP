@@ -15,19 +15,21 @@ import (
 )
 
 type Target struct {
-	Name          string   `json:"name"`
-	Aliases       []string `json:"aliases"`
-	Description   string   `json:"description"`
-	Environment   string   `json:"environment"`
-	Host          string   `json:"host"`
-	Port          int      `json:"port"`
-	User          string   `json:"user"`
-	Transport     string   `json:"transport"`
-	IdentityFile  string   `json:"identity_file"`
-	Paths         []string `json:"paths"`
-	Tags          []string `json:"tags"`
-	Password      string   `json:"password"`
-	HostKeySHA256 string   `json:"host_key_sha256,omitempty"`
+	Name                 string   `json:"name"`
+	Aliases              []string `json:"aliases"`
+	Description          string   `json:"description"`
+	Environment          string   `json:"environment"`
+	Host                 string   `json:"host"`
+	Port                 int      `json:"port"`
+	User                 string   `json:"user"`
+	Transport            string   `json:"transport"`
+	IdentityFile         string   `json:"identity_file"`
+	Paths                []string `json:"paths"`
+	Tags                 []string `json:"tags"`
+	Password             string   `json:"password"`
+	PrivateKey           string   `json:"private_key"`
+	PrivateKeyPassphrase string   `json:"private_key_passphrase"`
+	HostKeySHA256        string   `json:"host_key_sha256,omitempty"`
 }
 
 // Targets are decoded from a private local file, but must never serialize secrets.
@@ -187,10 +189,21 @@ func (t Target) authMode() string {
 	if t.IsLocal() {
 		return "local"
 	}
+	if t.PrivateKey != "" || (t.IdentityFile != "" && t.UsesBuiltinSSH()) {
+		if t.Password != "" {
+			return "private_key_or_password"
+		}
+		return "private_key"
+	}
 	if t.Password != "" {
 		return "password"
 	}
 	return "key_or_ssh_config"
+}
+
+// Existing agent/ssh_config and key-file-only connections retain OpenSSH behavior.
+func (t Target) UsesBuiltinSSH() bool {
+	return t.Password != "" || t.PrivateKey != "" || t.PrivateKeyPassphrase != "" || (t.HostKeySHA256 != "" && t.IdentityFile != "")
 }
 
 func (r *Registry) loadLocked(requireOK bool) error {
@@ -219,16 +232,19 @@ func (r *Registry) loadLocked(requireOK bool) error {
 		if t.Port < 0 || t.Port > 65535 {
 			return fmt.Errorf("target %s port must be 1-65535 (or omitted for 22)", name)
 		}
-		if t.Password != "" && strings.TrimSpace(t.IdentityFile) != "" {
-			return fmt.Errorf("target %s must choose password or identity_file, not both", name)
+		if t.PrivateKey != "" && strings.TrimSpace(t.IdentityFile) != "" {
+			return fmt.Errorf("target %s must choose private_key or identity_file, not both", name)
+		}
+		if t.PrivateKeyPassphrase != "" && t.PrivateKey == "" && strings.TrimSpace(t.IdentityFile) == "" {
+			return fmt.Errorf("target %s private_key_passphrase requires private_key or identity_file", name)
 		}
 		if t.HostKeySHA256 != "" {
 			decoded, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(t.HostKeySHA256, "SHA256:"))
 			if !strings.HasPrefix(t.HostKeySHA256, "SHA256:") || err != nil || len(decoded) != 32 {
 				return fmt.Errorf("target %s host_key_sha256 must be an OpenSSH SHA256 fingerprint", name)
 			}
-			if t.Password == "" {
-				return fmt.Errorf("target %s host_key_sha256 is only supported with password authentication", name)
+			if !t.UsesBuiltinSSH() {
+				return fmt.Errorf("target %s host_key_sha256 requires password, private_key or identity_file", name)
 			}
 		}
 		key := strings.ToLower(name)
@@ -250,7 +266,7 @@ func (r *Registry) loadLocked(requireOK bool) error {
 			return fmt.Errorf("target %s transport must be ssh or local", name)
 		}
 		file.Targets[i].Transport = tr
-		if tr == "local" && (t.Password != "" || t.HostKeySHA256 != "") {
+		if tr == "local" && (t.UsesBuiltinSSH() || t.HostKeySHA256 != "") {
 			return fmt.Errorf("target %s local transport cannot use SSH credentials", name)
 		}
 

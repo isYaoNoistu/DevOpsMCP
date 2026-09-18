@@ -2,10 +2,11 @@
 // 运行主机：开发机（Cursor / WorkBuddy 拉起）
 // 调用方：MCP 客户端（~/.cursor/mcp.json 等）
 // 大概流程：
-//   1) 读 HOST_LOGS_TARGETS_FILE（mtime 变化则下次调用自动 reload）
-//   2) targets 可直接配置 password（内置 SSH）；密钥 / ssh_config 继续用本机 OpenSSH
-//   3) 注册 list_targets / get_target_info / list_log_files / search_log / tail_log
-//   4) 走 stdio MCP；无 exec、无写文件
+//  1. 读 HOST_LOGS_TARGETS_FILE（mtime 变化则下次调用自动 reload）
+//  2. targets 可配置 password 或 private_key（内置 SSH）；原有密钥文件 / ssh_config 兼容 OpenSSH
+//  3. 注册 list_targets / get_target_info / list_log_files / search_log / tail_log
+//  4. 走 stdio MCP；无 exec、无写文件
+//
 // 勿放密钥：私钥路径可写在本机 targets，私钥本身和密码不进仓库
 package main
 

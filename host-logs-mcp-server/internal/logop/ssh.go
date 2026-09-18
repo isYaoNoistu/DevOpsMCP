@@ -89,8 +89,8 @@ func runSSH(ctx context.Context, t targets.Target, cfg SSHConfig, remote string)
 	if t.IsLocal() {
 		return "", fmt.Errorf("internal: ssh runner used on local target")
 	}
-	if t.Password != "" {
-		return runPasswordSSH(ctx, t, cfg, remote)
+	if t.UsesBuiltinSSH() {
+		return runBuiltinSSH(ctx, t, cfg, remote)
 	}
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout())
 	defer cancel()

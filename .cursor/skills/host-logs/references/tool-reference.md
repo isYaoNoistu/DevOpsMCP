@@ -29,7 +29,7 @@
 |---|---|
 | `target` | 稳定名或唯一别名 |
 
-返回 host、port、user、transport、paths、identity_file 的 basename。无密码；`auth` 显示 password / key_or_ssh_config / local。
+返回 host、port、user、transport、paths、identity_file 的 basename。无密码；`auth` 显示 password / private_key / private_key_or_password / key_or_ssh_config / local。
 
 ## Files
 
@@ -76,7 +76,8 @@
 |---|---|
 | `no target matched` / `ambiguous` | 先 `list_targets`，不要猜 |
 | `reload targets file` / `parse targets file` | targets JSON 坏了或字段不合法；先修文件，不要当已经切主机 |
-| `choose password or identity_file` | 主机密码和私钥二选一；密码可直接放本机 targets |
+| `choose private_key or identity_file` | 两种密钥来源二选一；可同时填 password 作为回退 |
+| `invalid private key` / `private_key_passphrase` | 私钥正文或解密口令无效，连接前失败 |
 | `allowlist path is too broad` | `paths` 写到具体目录，不要 `/` 或 `/data` |
 | `outside this target allowlist` | `path` 不在该 target 的 `paths` 下 |
 | `looks like a secret file` | 命中 `.env` / 密钥类后缀 |

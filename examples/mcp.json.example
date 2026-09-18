@@ -46,7 +46,7 @@
       "command": "D:/project/CICD/cicd/mcp/host-logs-mcp-server/host-logs-mcp-server.exe",
       "args": [],
       "env": {
-        "HOST_LOGS_TARGETS_FILE": "C:/Users/15509/.cursor/host-logs-targets.json",
+        "HOST_LOGS_TARGETS_FILE": "D:/project/CICD/.codex/host-logs-targets.json",
         "HOST_LOGS_READ_ONLY": "true"
       }
     }

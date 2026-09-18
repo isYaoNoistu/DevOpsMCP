@@ -17,7 +17,7 @@ description: Use when searching host log files through the host-logs MCP tools, 
 
 ## 连接配置
 
-账号密码方式只需客户端 MCP 配置和一份本机 targets：每台主机填 name、host、user、password、paths，port 默认 22。密码不回显；不要再要求用户额外生成私钥或配置凭据文件。已有密钥方式继续兼容。密码模式首次记录未知主机指纹，变化时拒绝；可在同一条记录设置 host_key_sha256。详细写法见服务配置指南。
+客户端 MCP 配置加一份本机 targets 即可：每台主机填 name、host、user、paths，再填 password 或 private_key，port 默认 22。加密私钥使用 private_key_passphrase。密码和密钥可混用，也可同一记录共存：先密钥后密码。私钥正文与 identity_file 二选一；旧密钥文件方式继续兼容。凭据不回显，不要求额外凭据文件。内置认证首次记录未知主机指纹，变化时拒绝；可设 host_key_sha256 固定指纹。创建用户后需要 passwd 设置密码，密钥用户需安装对应公钥，具体步骤见服务配置指南。
 
 ## 查询前先确定
 

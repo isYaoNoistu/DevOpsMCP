@@ -3,7 +3,7 @@
 适用于夜莺、Jenkins、PostgreSQL、MySQL 和主机日志。五个程序都是本机 stdio 服务：Codex 启动二进制，通过标准输入输出调用工具，不需要为程序填写 HTTP MCP 地址。
 
 
-本机路径说明：五个 `.exe` 已位于 `D:/project/CICD/cicd/mcp/` 对应服务目录；现有 PostgreSQL 清单为 `C:/Users/15509/.cursor/postgres-targets.json`。MySQL 和主机日志清单统一约定放在同一 `.cursor` 目录，但当前尚未创建；请先从样例复制并填写真实目标。多环境拆分的清单、SSH 示例密钥也尚不存在，不能直接照抄后就查询。Jenkins 默认缓存位于 `C:/Users/15509/AppData/Local/jenkins-mcp`，多环境使用带环境后缀的独立目录。
+本机路径说明：五个 `.exe` 已位于 `D:/project/CICD/cicd/mcp/` 对应服务目录；现有 PostgreSQL 清单为 `C:/Users/15509/.cursor/postgres-targets.json`。MySQL 清单示例放在同一 `.cursor` 目录；主机日志使用当前界面配置的 `D:/project/CICD/.codex/host-logs-targets.json`。使用前核对各清单是否存在并填写真实目标。多环境拆分的清单、SSH 示例密钥也尚不存在，不能直接照抄后就查询。Jenkins 默认缓存位于 `C:/Users/15509/AppData/Local/jenkins-mcp`，多环境使用带环境后缀的独立目录。
 
 ## 1. 准备与添加
 
@@ -23,6 +23,30 @@ codex mcp list
 
 CLI 和手动编辑是两种替代方式，不要对同名服务重复添加。没有 CLI 时直接编辑 TOML。CLI 会话中用 `/mcp` 查看连接状态；桌面端或 IDE 扩展可在 MCP 设置中查看状态。这里只读程序使用 Token、数据库凭据或 SSH 密码/密钥，不需要执行 OAuth `mcp login`。
 
+### 在 Codex 软件界面中添加（Host-logs 示例）
+
+在 Codex 的设置中打开 MCP 服务器配置，添加本地 stdio 服务；如果已经存在 Host-logs，直接打开它的更新页面。下面按当前软件界面的字段填写：
+
+| 界面字段 | 填写内容 |
+| --- | --- |
+| 名称（新增时） | `host-logs` |
+| 启动命令 | `D:/project/CICD/cicd/mcp/host-logs-mcp-server/host-logs-mcp-server.exe` |
+| 参数 | 不添加参数；已有空白参数行可点右侧垃圾桶删除。不要填写 `[]`、`stdio` 或引号 |
+| 环境变量第 1 行：名称 | `HOST_LOGS_TARGETS_FILE` |
+| 环境变量第 1 行：值 | `D:/project/CICD/.codex/host-logs-targets.json` |
+| 环境变量第 2 行：名称 | `HOST_LOGS_READ_ONLY` |
+| 环境变量第 2 行：值 | `true` |
+
+点“添加环境变量”逐行填写，左边是变量名，右边是值。界面输入框直接填写表格内容，不带反引号或额外的双引号，也不用填写 `KEY=value`。
+
+保存（或更新）后重启该 MCP 连接；必要时重新打开 Codex 或新建会话。先调用 `list_targets` 确认清单加载，再调用 `list_log_files` 验证实际 SSH 连接。仅在设置中看见服务，并不代表已经连上主机。
+
+主机地址、用户名、`password` 或 `private_key` 仍填写在 `D:/project/CICD/.codex/host-logs-targets.json` 中，不填到“参数”栏。密码和密钥登录使用相同的界面配置；新增主机或环境，只需在该文件的 `targets` 数组中增加记录。
+
+通过软件界面添加与手动编辑 `config.toml` 是替代方式，选一种即可，不必再手动重复添加同一服务。当前截图中的“更新 Host-logs MCP”页面可以直接按上表修改，无需卸载重建；只有确实要切换 MCP 服务器类型时，才按界面提示处理。
+
+其他四个 MCP 也可按相同方式在界面添加：`command` 对应“启动命令”，`args` 每个元素对应一条“参数”，`env` 的每个键值对应一行“环境变量”。夜莺需要一条 `stdio` 参数，Jenkins、PostgreSQL、MySQL 和 Host-logs 不需要参数；具体变量见 [五服务样例](examples/codex.toml.example)。
+
 ## 2. 配置字段和凭据
 
 | 字段 | 含义 |
@@ -40,7 +64,7 @@ CLI 和手动编辑是两种替代方式，不要对同名服务重复添加。�
 
 TOML 中的 `"${N9E_TOKEN}"` 是字符串，不是本项目提供的变量展开功能。多个环境需要不同 Token 时，按下文给每个实例单独设置 `.env`；不要把不同名称的变量直接传入程序，程序只认规定的变量名。真实 Token 只保存在本机私有配置或凭据机制中，不写到仓库样例，也不要放入命令行历史。
 
-PostgreSQL / MySQL 的 TOML 只指向 targets 文件。数据库密码通过 Windows 凭据管理器或 pgpass / mysqlpass 提供；targets 禁止 `password`。`credential_ref` 是凭据的查找名称，不是密码。主机日志可直接在本机 targets 中填写 `password`，只需 Codex 配置加主机清单两份文件；也兼容已有的 SSH 私钥方式。
+PostgreSQL / MySQL 的 TOML 只指向 targets 文件。数据库密码通过 Windows 凭据管理器或 pgpass / mysqlpass 提供；targets 禁止 `password`。`credential_ref` 是凭据的查找名称，不是密码。主机日志可直接在本机 targets 中填写 `password` 或 `private_key`，只需 Codex 配置加主机清单两份文件；也兼容已有的 SSH 私钥方式。
 
 ## 3. 多环境：先区分两种配置方式
 
@@ -74,7 +98,7 @@ Jenkins 各环境必须使用不同的 `JENKINS_MCP_CACHE_DIR`。控制台缓存
 
 数据库按环境分别配置 `credential_ref`，例如 `mysql/orders-uat` 与 `mysql/orders-prod`，并为每个引用写入对应的只读账号凭据。生产配置使用 `verify-full`，需要证书信任和主机名校验正确；不要通过降低生产 TLS 校验来解决连接失败。
 
-主机日志为每个环境填写 `host`、`user`、`password` 和具体日志目录 `paths`，端口默认 22。密码方式无需私钥或本机 OpenSSH；首次连接自动记录未知主机指纹，后续拒绝变化，也可通过同一条记录中的 `host_key_sha256` 固定指纹。远端需要 Bash 和文档列出的 GNU 工具。完整两文件示例见 [主机日志配置](host-logs-mcp-server/docs/configuration.md)。
+主机日志为每个环境填写 `host`、`user`、`password` 或 `private_key` 以及具体日志目录 `paths`，端口默认 22。密码/内嵌私钥方式无需额外私钥文件或本机 OpenSSH；首次连接自动记录未知主机指纹，后续拒绝变化，也可通过同一条记录中的 `host_key_sha256` 固定指纹。远端需要 Bash 和文档列出的 GNU 工具。完整两文件示例见 [主机日志配置](host-logs-mcp-server/docs/configuration.md)。
 
 查询示例：“用 MySQL 的 `list_targets` 确认 `orders-uat`，再查该 target 的长事务”；“使用主机日志 target `orders-prod` 列文件，只检索最近 15 分钟的 timeout”。主机日志路径必须来自该 target 的 allowlist。
 

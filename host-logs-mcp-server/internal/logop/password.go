@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,12 +23,15 @@ import (
 // Redact across SSH packet boundaries before enforcing the byte limit. Otherwise
 // truncation can split a secret and leave a nearly complete password in output.
 type redactingWriter struct {
-	dst     *limitedBuffer
+	dst     io.Writer
 	secret  string
 	pending string
 }
 
 func (w *redactingWriter) Write(p []byte) (int, error) {
+	if w.secret == "" {
+		return w.dst.Write(p)
+	}
 	data := w.pending + string(p)
 	for {
 		i := strings.Index(data, w.secret)
@@ -51,7 +56,7 @@ func (w *redactingWriter) flush() {
 // Serialize first-use trust updates from concurrent calls in this process.
 var hostTrustMu sync.Mutex
 
-func passwordHostKey(t targets.Target, cfg SSHConfig) (ssh.HostKeyCallback, error) {
+func builtinHostKey(t targets.Target, cfg SSHConfig) (ssh.HostKeyCallback, error) {
 	if t.HostKeySHA256 != "" {
 		return func(_ string, _ net.Addr, key ssh.PublicKey) error {
 			if ssh.FingerprintSHA256(key) != t.HostKeySHA256 {
@@ -68,7 +73,7 @@ func passwordHostKey(t targets.Target, cfg SSHConfig) (ssh.HostKeyCallback, erro
 		}
 		path = filepath.Join(home, ".ssh", "known_hosts")
 	}
-	// Password mode is a two-file setup: first-use fingerprints are system-managed.
+	// Built-in auth is a two-file setup: first-use fingerprints are system-managed.
 	// Explicit strict=yes keeps the existing pre-provisioned known_hosts workflow.
 	acceptNew := strings.TrimSpace(cfg.StrictHostKey) == "" || cfg.strict() == "accept-new"
 	return func(host string, addr net.Addr, key ssh.PublicKey) error {
@@ -123,19 +128,26 @@ func passwordHostKey(t targets.Target, cfg SSHConfig) (ssh.HostKeyCallback, erro
 	}, nil
 }
 
-func runPasswordSSH(ctx context.Context, t targets.Target, cfg SSHConfig, remote string) (out string, retErr error) {
+func runBuiltinSSH(ctx context.Context, t targets.Target, cfg SSHConfig, remote string) (out string, retErr error) {
+	methods, secrets, authErr := builtinAuth(t)
 	defer func() {
 		if retErr != nil {
-			message := strings.ReplaceAll(retErr.Error(), t.Password, "[redacted]")
+			message := retErr.Error()
+			for _, secret := range secrets {
+				message = strings.ReplaceAll(message, secret, "[redacted]")
+			}
 			if len(message) > limits.MaxBytes {
 				message = message[:limits.MaxBytes] + "...[truncated]"
 			}
 			retErr = errors.New(message)
 		}
 	}()
+	if authErr != nil {
+		return "", authErr
+	}
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout())
 	defer cancel()
-	verify, err := passwordHostKey(t, cfg)
+	verify, err := builtinHostKey(t, cfg)
 	if err != nil {
 		return "", fmt.Errorf("ssh: %w", err)
 	}
@@ -153,7 +165,7 @@ func runPasswordSSH(ctx context.Context, t targets.Target, cfg SSHConfig, remote
 	}
 	clientConn, channels, requests, err := ssh.NewClientConn(conn, address, &ssh.ClientConfig{
 		User:            t.User,
-		Auth:            []ssh.AuthMethod{ssh.Password(t.Password)},
+		Auth:            methods,
 		HostKeyCallback: verify,
 	})
 	if err != nil {
@@ -167,13 +179,13 @@ func runPasswordSSH(ctx context.Context, t targets.Target, cfg SSHConfig, remote
 	}
 	defer session.Close()
 	var stdout, stderr limitedBuffer
-	output := &redactingWriter{dst: &stdout, secret: t.Password}
-	errorsOutput := &redactingWriter{dst: &stderr, secret: t.Password}
+	output, flushOutput := redactedOutput(&stdout, secrets)
+	errorsOutput, flushErrors := redactedOutput(&stderr, secrets)
 	session.Stdout = output
 	session.Stderr = errorsOutput
 	err = session.Run(remote)
-	output.flush()
-	errorsOutput.flush()
+	flushOutput()
+	flushErrors()
 	out = stdout.String()
 	if stdout.truncated {
 		out += "\n...[truncated]\n"
@@ -189,4 +201,68 @@ func runPasswordSSH(ctx context.Context, t targets.Target, cfg SSHConfig, remote
 		return out, fmt.Errorf("ssh: %s", message)
 	}
 	return out, nil
+}
+
+// Valid keys are tried first; a rejected key can fall back to a supplied password.
+// Malformed credentials fail locally instead of silently masking a configuration error.
+func builtinAuth(t targets.Target) ([]ssh.AuthMethod, []string, error) {
+	key := t.PrivateKey
+	if key == "" && t.IdentityFile != "" {
+		raw, err := os.ReadFile(t.IdentityFile)
+		if err != nil {
+			return nil, nil, fmt.Errorf("ssh: cannot read private key file")
+		}
+		key = string(raw)
+	}
+	secrets := []string{t.Password, t.PrivateKeyPassphrase, key}
+	// Mask individual PEM payload lines as well, even when a log reformats newlines.
+	for _, line := range strings.Split(key, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "-----") {
+			secrets = append(secrets, line)
+		}
+	}
+	unique := map[string]bool{}
+	clean := make([]string, 0, len(secrets))
+	for _, secret := range secrets {
+		if secret != "" && !unique[secret] {
+			unique[secret] = true
+			clean = append(clean, secret)
+		}
+	}
+	sort.SliceStable(clean, func(i, j int) bool { return len(clean[i]) > len(clean[j]) })
+	var methods []ssh.AuthMethod
+	if key != "" || t.IdentityFile != "" {
+		var signer ssh.Signer
+		var err error
+		if t.PrivateKeyPassphrase != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(key), []byte(t.PrivateKeyPassphrase))
+		} else {
+			signer, err = ssh.ParsePrivateKey([]byte(key))
+		}
+		if err != nil {
+			return nil, clean, fmt.Errorf("ssh: invalid private key or missing/incorrect private_key_passphrase")
+		}
+		methods = append(methods, ssh.PublicKeys(signer))
+	}
+	if t.Password != "" {
+		methods = append(methods, ssh.Password(t.Password))
+	}
+	if len(methods) == 0 {
+		return nil, clean, fmt.Errorf("ssh: password or private key is required")
+	}
+	return methods, clean, nil
+}
+
+func redactedOutput(dst io.Writer, secrets []string) (io.Writer, func()) {
+	writers := make([]*redactingWriter, len(secrets))
+	for i := len(secrets) - 1; i >= 0; i-- {
+		writers[i] = &redactingWriter{dst: dst, secret: secrets[i]}
+		dst = writers[i]
+	}
+	return dst, func() {
+		for _, writer := range writers {
+			writer.flush()
+		}
+	}
 }

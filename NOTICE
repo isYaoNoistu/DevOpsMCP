@@ -40,8 +40,9 @@ follows the idea of the MCP filesystem reference server (directory
 roots, reject "..", resolve before use). MCP Roots are treated as
 advisory only, not a sandbox. Remote commands are fixed
 find/grep/awk/tail templates with POSIX quoting (OWASP MCP05), not a
-generic SSH exec MCP. Password authentication uses golang.org/x/crypto/ssh;
-OpenSSH BatchMode remains the key-based path. Credentials stay in private
+generic SSH exec MCP. Password and inline private-key authentication use
+golang.org/x/crypto/ssh; legacy key-file-only configuration retains OpenSSH
+BatchMode. Credentials stay in private
 local configuration and are not returned by target tools.
 
 Go SSH dependencies: golang.org/x/crypto and golang.org/x/sys,

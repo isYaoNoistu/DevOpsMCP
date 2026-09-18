@@ -39,7 +39,7 @@ func newTestSigner(t *testing.T) ssh.Signer {
 }
 
 // A loopback SSH fixture: no real host, shell, credentials, or filesystem access.
-func passwordFixture(t *testing.T, output string, status uint32, stall bool) (targets.Target, SSHConfig, *atomic.Int32, <-chan string, ssh.Signer) {
+func passwordFixture(t *testing.T, output string, status uint32, stall bool, authorized ...ssh.PublicKey) (targets.Target, SSHConfig, *atomic.Int32, <-chan string, ssh.Signer) {
 	t.Helper()
 	signer := newTestSigner(t)
 	auths := &atomic.Int32{}
@@ -50,6 +50,15 @@ func passwordFixture(t *testing.T, output string, status uint32, stall bool) (ta
 		}
 		return nil, nil
 	}}
+	if len(authorized) > 0 {
+		config.PublicKeyCallback = func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			auths.Add(1)
+			if c.User() == "reader" && string(key.Marshal()) == string(authorized[0].Marshal()) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("public key rejected")
+		}
+	}
 	config.AddHostKey(signer)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

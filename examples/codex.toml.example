@@ -61,5 +61,5 @@ startup_timeout_sec = 20
 tool_timeout_sec = 60
 
 [mcp_servers.host-logs.env]
-HOST_LOGS_TARGETS_FILE = "C:/Users/15509/.cursor/host-logs-targets.json"
+HOST_LOGS_TARGETS_FILE = "D:/project/CICD/.codex/host-logs-targets.json"
 HOST_LOGS_READ_ONLY = "true"

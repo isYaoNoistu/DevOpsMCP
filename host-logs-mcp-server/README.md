@@ -5,9 +5,9 @@
 ## 最简配置：两个文件
 
 1. `C:/Users/15509/.codex/config.toml`：填写本目录 `.exe` 路径和 `HOST_LOGS_TARGETS_FILE`。
-2. `C:/Users/15509/.cursor/host-logs-targets.json`：集中填写所有主机的地址、用户名、密码和允许读取的日志目录。
+2. `D:/project/CICD/.codex/host-logs-targets.json`：集中填写所有主机的地址、用户名、password 或 private_key 和允许读取的日志目录。
 
-不需要单独的密钥文件，密码方式不依赖本机 OpenSSH。完整可复制配置见 [两文件配置指南](docs/configuration.md)。现有密钥连接继续兼容。
+不需要单独的密钥文件，密码和内嵌私钥方式不依赖本机 OpenSSH。完整可复制配置见 [两文件配置指南](docs/configuration.md)。现有密钥连接继续兼容。
 
 ```json
 {
@@ -28,6 +28,14 @@
 端口默认 22，别名、标签、环境描述都可不填。多个环境在 `targets` 数组中增加记录即可，见 [多环境样例](examples/host-logs-targets.multi-env.example.json)。真实密码仅保存在本机私有配置，仓库中的密码是占位符。
 
 首次连接自动记录未知主机指纹，之后拒绝指纹变化。缓存由程序维护，无需手动配置第三个文件；也可在同一条主机配置中指定 `host_key_sha256` 固定主机身份。账号必须具备日志读取权限，远端需要 Bash 及 GNU 工具，详情见配置指南。
+
+## 密码与密钥都支持
+
+- 账号密码：填 `user` + `password`。
+- 账号密钥：填 `user` + `private_key`；加密私钥再填 `private_key_passphrase`。见 [密钥样例](examples/host-logs-targets.key.example.json)。
+- 两种同时填写：先密钥、后密码，任一种认证成功即可。已有 `identity_file` 文件方式继续兼容。
+
+服务器创建用户后还要用 **`sudo passwd mcp_logs`** 设置登录密码；密钥账号需要把对应公钥装到 authorized_keys。创建用户、权限、公钥安装和 SSH 二选一认证配置见 [配置指南](docs/configuration.md)。
 
 ## 工具
 
@@ -66,6 +74,8 @@ go build -o host-logs-mcp-server.exe .
 
 ## Codex 接入与多环境配置
 
+也可以直接通过 Codex 软件的 MCP 设置添加：按 [界面填写步骤](docs/configuration.md) 填写启动命令、空参数和两行环境变量；与下面手动编辑 TOML 的方式二选一即可。
+
 在用户级 `C:/Users/15509/.codex/config.toml`合并下面配置，替换程序和配置文件的绝对路径，保留原有设置；不要重复定义同名表。
 
 ```toml
@@ -77,13 +87,13 @@ startup_timeout_sec = 20
 tool_timeout_sec = 60
 
 [mcp_servers.host-logs.env]
-HOST_LOGS_TARGETS_FILE = "C:/Users/15509/.cursor/host-logs-targets.json"
+HOST_LOGS_TARGETS_FILE = "D:/project/CICD/.codex/host-logs-targets.json"
 HOST_LOGS_READ_ONLY = "true"
 ```
 
-一份 targets 清单可配置 UAT / PROD 多台主机，每条分别设置 `name`、SSH 用户、密码和目录 `paths`。先 `list_targets` 再列文件，以明确的 `target` 和 allowlist 内路径检索；需要隔离时拆清单并注册两个实例。
+一份 targets 清单可配置 UAT / PROD 多台主机，每条分别设置 `name`、SSH 用户、密码或私钥和目录 `paths`。先 `list_targets` 再列文件，以明确的 `target` 和 allowlist 内路径检索；需要隔离时拆清单并注册两个实例。
 
-可复制 [UAT / PROD targets 样例](examples/host-logs-targets.multi-env.example.json) 到本机后修改，并让上述 targets 环境变量指向它。主机密码直接写在这份本机清单；真实密码不提交仓库。
+可复制 [UAT / PROD targets 样例](examples/host-logs-targets.multi-env.example.json) 到本机后修改，并让上述 targets 环境变量指向它。主机密码或私钥直接写在这份本机清单；真实凭据不提交仓库。
 
 保存后重启对应 MCP 连接。CLI 可用 `codex mcp list` 检查配置、在会话中用 `/mcp` 核对连接；握手成功后再做小范围远端只读查询。
 

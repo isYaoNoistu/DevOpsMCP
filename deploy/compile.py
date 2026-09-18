@@ -41,7 +41,7 @@ This folder is a build output. Put it anywhere; do not commit it.
    point MYSQL_TARGETS_FILE at that file. Put the password in mysqlpass /
    Credential Manager.
 5. Host logs: copy examples/host-logs-targets.example.json, fill host/user/
-   password/paths in your private local copy, and set HOST_LOGS_TARGETS_FILE.
+   password or private_key, and paths in your private local copy; set HOST_LOGS_TARGETS_FILE.
    No separate key file is needed. Existing SSH key configurations still work.
 
 Same-host URLs for a Docker hub: host.docker.internal, not 127.0.0.1.
@@ -146,6 +146,8 @@ def copy_examples(out: Path) -> None:
         REPO / "postgres-mcp-server" / "examples" / "postgres-targets.example.json",
         REPO / "mysql-mcp-server" / "examples" / "mysql-targets.example.json",
         REPO / "host-logs-mcp-server" / "examples" / "host-logs-targets.example.json",
+        REPO / "host-logs-mcp-server" / "examples" / "host-logs-targets.key.example.json",
+        REPO / "host-logs-mcp-server" / "examples" / "host-logs-targets.multi-env.example.json",
     ]
     for src in files:
         if src.is_file():

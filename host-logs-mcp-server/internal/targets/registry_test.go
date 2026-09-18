@@ -80,11 +80,53 @@ func TestRejectBroadPath(t *testing.T) {
 }
 
 func TestRejectInvalidPasswordTargets(t *testing.T) {
-	for _, extra := range []string{`"port":65536`, `"port":-1`, `"identity_file":"key.pem"`, `"transport":"local"`, `"host_key_sha256":"invalid"`} {
+	for _, extra := range []string{`"port":65536`, `"port":-1`, `"transport":"local"`, `"host_key_sha256":"invalid"`} {
 		p := writeTargets(t, t.TempDir(), `{"targets":[{"name":"x","host":"h","user":"u","paths":["/var/log/nginx"],"password":"test-only-password",`+extra+`}]}`)
 		if _, err := New(p); err == nil || strings.Contains(err.Error(), "test-only-password") {
 			t.Fatalf("expected safe validation error for %s", extra)
 		}
+	}
+}
+
+func TestInlineKeyRegistryAndAuthSelection(t *testing.T) {
+	for _, credentials := range []string{
+		`"private_key":"test-only-inline-key"`,
+		`"private_key":"test-only-inline-key","password":"test-only-pass"`,
+		`"identity_file":"key.pem","password":"test-only-pass"`,
+	} {
+		p := writeTargets(t, t.TempDir(), `{"targets":[{"name":"keys","host":"example.com","user":"reader","paths":["/var/log/nginx"],`+credentials+`}]}`)
+		r, err := New(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target, _, err := r.Resolve("keys")
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(target)
+		if strings.Contains(string(raw), "test-only") {
+			t.Fatal("registry exposed credential")
+		}
+		if !strings.Contains(string(raw), "private_key") && strings.Contains(credentials, "private_key") {
+			t.Fatal("inline key auth mode not reported")
+		}
+	}
+}
+
+func TestRejectConflictingOrIncompleteKeyConfiguration(t *testing.T) {
+	for _, extra := range []string{
+		`"private_key":"test-only-key","identity_file":"key.pem"`,
+		`"private_key_passphrase":"test-only-passphrase"`,
+		`"private_key":"test-only-key","transport":"local"`,
+	} {
+		p := writeTargets(t, t.TempDir(), `{"targets":[{"name":"keys","host":"example.com","user":"reader","paths":["/var/log/nginx"],`+extra+`}]}`)
+		_, err := New(p)
+		if err == nil || strings.Contains(err.Error(), "test-only") {
+			t.Fatal("expected safe key configuration error")
+		}
+	}
+	if (Target{IdentityFile: "key.pem"}).UsesBuiltinSSH() {
+		t.Fatal("legacy key-file-only mode must retain OpenSSH")
 	}
 }
 
