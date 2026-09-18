@@ -40,8 +40,12 @@ func New(t targets.Target) (*Client, error) {
 	}
 	if t.TLS.Enabled {
 		conf := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: t.TLS.ServerName}
-		if t.TLS.CAFile != "" {
-			pem, e := os.ReadFile(t.TLS.CAFile)
+		if t.TLS.CAFile != "" || t.TLS.CAPEM != "" {
+			pem := []byte(t.TLS.CAPEM)
+			var e error
+			if t.TLS.CAFile != "" {
+				pem, e = os.ReadFile(t.TLS.CAFile)
+			}
 			if e != nil {
 				return nil, errors.New("TLS CA unavailable")
 			}
@@ -51,8 +55,14 @@ func New(t targets.Target) (*Client, error) {
 			}
 			conf.RootCAs = pool
 		}
-		if t.TLS.CertFile != "" || t.TLS.KeyFile != "" {
-			cert, e := tls.LoadX509KeyPair(t.TLS.CertFile, t.TLS.KeyFile)
+		if t.TLS.CertFile != "" || t.TLS.KeyFile != "" || t.TLS.CertPEM != "" || t.TLS.KeyPEM != "" {
+			var cert tls.Certificate
+			var e error
+			if t.TLS.CertPEM != "" || t.TLS.KeyPEM != "" {
+				cert, e = tls.X509KeyPair([]byte(t.TLS.CertPEM), []byte(t.TLS.KeyPEM))
+			} else {
+				cert, e = tls.LoadX509KeyPair(t.TLS.CertFile, t.TLS.KeyFile)
+			}
 			if e != nil {
 				return nil, errors.New("TLS client certificate unavailable")
 			}

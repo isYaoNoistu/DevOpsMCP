@@ -7,6 +7,9 @@ import (
 )
 
 func Password(t targets.Target) (string, error) {
+	if t.InlineCredential {
+		return t.Password, nil
+	}
 	if t.CredentialRef != "" {
 		if p, ok := lookupOS(t.CredentialRef); ok && p != "" {
 			return p, nil

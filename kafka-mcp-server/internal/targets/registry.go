@@ -20,19 +20,32 @@ const maxFileBytes = 1 << 20
 
 // Registry reads configuration for every operation so removed permissions never
 // survive a failed reload. It retains no mutable configuration or credentials.
-type Registry struct{ file string }
+type Registry struct {
+	file     string
+	inline   string
+	platform bool
+}
 
-func New(file string) *Registry { return &Registry{file: file} }
+func New(file string) *Registry {
+	inline, platform := os.LookupEnv("KAFKA_TARGETS_JSON")
+	return &Registry{file: file, inline: inline, platform: platform}
+}
 
 func (r *Registry) List() ([]Target, error) {
-	f, err := os.Open(r.file)
-	if err != nil {
-		return nil, errors.New("target configuration cannot be read")
-	}
-	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, maxFileBytes+1))
-	if err != nil {
-		return nil, errors.New("target configuration cannot be read")
+	var b []byte
+	var err error
+	if r.platform {
+		b = []byte(r.inline)
+	} else {
+		f, e := os.Open(r.file)
+		if e != nil {
+			return nil, errors.New("target configuration cannot be read")
+		}
+		defer f.Close()
+		b, err = io.ReadAll(io.LimitReader(f, maxFileBytes+1))
+		if err != nil {
+			return nil, errors.New("target configuration cannot be read")
+		}
 	}
 	if len(b) > maxFileBytes {
 		return nil, errors.New("target configuration exceeds 1 MiB")
@@ -53,6 +66,9 @@ func (r *Registry) List() ([]Target, error) {
 	}
 	seen := map[string]bool{}
 	for _, t := range cfg.Targets {
+		if r.platform && (t.TLS.CAFile != "" || t.TLS.CertFile != "" || t.TLS.KeyFile != "") {
+			return nil, errors.New("platform TLS requires inline PEM, not file paths")
+		}
 		if seen[t.Name] {
 			return nil, errors.New("duplicate target name")
 		}
@@ -134,10 +150,16 @@ func validate(t Target) error {
 			return errors.New("invalid group allowlist")
 		}
 	}
+	if (t.TLS.CertPEM == "") != (t.TLS.KeyPEM == "") {
+		return errors.New("TLS PEM certificate and key must be configured together")
+	}
+	if (t.TLS.CAPEM != "" && t.TLS.CAFile != "") || ((t.TLS.CertPEM != "" || t.TLS.KeyPEM != "") && (t.TLS.CertFile != "" || t.TLS.KeyFile != "")) {
+		return errors.New("TLS file and PEM sources conflict")
+	}
 	if (t.TLS.CertFile == "") != (t.TLS.KeyFile == "") {
 		return errors.New("TLS certificate and key must be configured together")
 	}
-	if !t.TLS.Enabled && (t.TLS.CAFile != "" || t.TLS.CertFile != "" || t.TLS.KeyFile != "" || t.TLS.ServerName != "") {
+	if !t.TLS.Enabled && (t.TLS.CAFile != "" || t.TLS.CertFile != "" || t.TLS.KeyFile != "" || t.TLS.ServerName != "" || t.TLS.CAPEM != "" || t.TLS.CertPEM != "" || t.TLS.KeyPEM != "") {
 		return errors.New("TLS options require TLS enabled")
 	}
 	s := t.SASL

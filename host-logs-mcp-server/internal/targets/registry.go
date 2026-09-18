@@ -40,24 +40,35 @@ type fileShape struct {
 }
 
 type Registry struct {
-	path string
-	mu   sync.Mutex
-	mod  time.Time
-	list []Target
+	path         string
+	platformJSON string
+	platform     bool
+	mu           sync.Mutex
+	mod          time.Time
+	list         []Target
 }
 
 func New(path string) (*Registry, error) {
-	if path == "" {
-		return nil, fmt.Errorf("HOST_LOGS_TARGETS_FILE is required")
+	inline, platform := os.LookupEnv("HOST_LOGS_TARGETS_JSON")
+	if path == "" && !platform {
+		return nil, fmt.Errorf("HOST_LOGS_TARGETS_FILE or HOST_LOGS_TARGETS_JSON is required")
 	}
-	r := &Registry{path: path}
+	r := &Registry{path: path, platformJSON: inline, platform: platform}
 	if err := r.loadLocked(true); err != nil {
+		if platform {
+			return nil, fmt.Errorf("invalid HOST_LOGS_TARGETS_JSON configuration")
+		}
 		return nil, err
 	}
 	return r, nil
 }
 
-func (r *Registry) Path() string { return r.path }
+func (r *Registry) Path() string {
+	if r.platform {
+		return ""
+	}
+	return r.path
+}
 
 func (r *Registry) List() ([]Target, error) {
 	r.mu.Lock()
@@ -207,21 +218,37 @@ func (t Target) UsesBuiltinSSH() bool {
 }
 
 func (r *Registry) loadLocked(requireOK bool) error {
-	st, err := os.Stat(r.path)
-	if err != nil {
-		return fmt.Errorf("read targets file %s: %w", r.path, err)
-	}
-	if !requireOK && st.ModTime().Equal(r.mod) && len(r.list) > 0 {
-		return nil
-	}
-	raw, err := os.ReadFile(r.path)
-	if err != nil {
-		return fmt.Errorf("read targets file %s: %w", r.path, err)
+	var raw []byte
+	var mod time.Time
+	if r.platform {
+		if !requireOK {
+			return nil
+		}
+		raw = []byte(r.platformJSON)
+		if len(raw) == 0 || len(raw) > 1<<20 {
+			return fmt.Errorf("platform configuration must be between 1 byte and 1 MiB")
+		}
+	} else {
+		st, err := os.Stat(r.path)
+		if err != nil {
+			return fmt.Errorf("read targets file: %w", err)
+		}
+		if !requireOK && st.ModTime().Equal(r.mod) && len(r.list) > 0 {
+			return nil
+		}
+		mod = st.ModTime()
+		raw, err = os.ReadFile(r.path)
+		if err != nil {
+			return fmt.Errorf("read targets file: %w", err)
+		}
 	}
 	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	var file fileShape
 	if err := json.Unmarshal(raw, &file); err != nil {
 		return fmt.Errorf("parse targets file: %w", err)
+	}
+	if r.platform && (len(file.Targets) == 0 || len(file.Targets) > 100) {
+		return fmt.Errorf("platform configuration requires 1 to 100 targets")
 	}
 	seen := map[string]struct{}{}
 	for i, t := range file.Targets {
@@ -292,6 +319,9 @@ func (r *Registry) loadLocked(requireOK bool) error {
 		file.Targets[i].Paths = cleaned
 
 		if tr == "ssh" {
+			if r.platform && (t.IdentityFile != "" || (t.Password == "" && t.PrivateKey == "") || t.HostKeySHA256 == "") {
+				return fmt.Errorf("platform SSH requires inline password or private_key and host_key_sha256; identity_file is not allowed")
+			}
 			if strings.TrimSpace(t.Host) == "" || strings.TrimSpace(t.User) == "" {
 				return fmt.Errorf("target %s ssh transport needs host and user", name)
 			}
@@ -304,7 +334,7 @@ func (r *Registry) loadLocked(requireOK bool) error {
 		}
 	}
 	r.list = file.Targets
-	r.mod = st.ModTime()
+	r.mod = mod
 	return nil
 }
 

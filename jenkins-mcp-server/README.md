@@ -186,3 +186,35 @@ Token 占位符只在本机私有配置中替换；继承环境变量的写法�
 保存后重启对应 MCP 连接。CLI 可用 `codex mcp list` 检查配置、在会话中用 `/mcp` 核对连接；握手成功后再做小范围远端只读查询。
 
 添加步骤、字段解释、凭据、环境切换和排障见 [Codex 完整指南](../CODEX.md)；可复制 [五服务 TOML](../examples/codex.toml.example) 或 [多环境 TOML](../examples/codex.multi-env.toml.example)。
+
+## 对接 YluneMCPHub：凭据怎么添加
+
+以下以 Linux Docker 部署月弦为例。先解压 `deploy/dist/devopsmcp-linux-amd64.tar.gz`，将所需二进制放入月弦宿主机的 `MCP_MOUNT_DIR`。默认挂载关系是 `/data/ylune-mcp` → 容器 `/opt/mcp`（只读）。如果使用了自定义挂载目录，以月弦实际 Compose 配置为准。`deploy` 只打包，不会自动复制文件、挂载或注册服务。
+
+月弦「服务器」中新建 **STDIO** 服务，启动命令和文件环境变量一律填写**容器内路径**，不能填开发机 Windows 路径或容器不可见的宿主机路径。
+
+启动命令：`/opt/mcp/jenkins-mcp-server`；参数留空。
+
+在凭据中心新建例如 `jenkins-uat`，填写：
+
+| 键 | 值示例 / 含义 |
+| --- | --- |
+| `JENKINS_URL` | `https://jenkins.example.com`，Jenkins 根地址 |
+| `JENKINS_USER` | `mcp-readonly`，Jenkins 登录用户名 |
+| `JENKINS_API_TOKEN` | 该账号生成的 API Token，直接在凭据中心填写真实值 |
+| `JENKINS_MCP_TIMEOUT` | `90s` |
+
+MCP 使用用户名加 API Token，不使用网页登录密码。不需要 targets 文件。连接后调用 `list_jobs` 验证权限。多个 Jenkins 实例若设置 `JENKINS_MCP_CACHE_DIR`，须分别指定不同的容器可写目录，不要指向只读 `/opt/mcp`。
+
+### 在月弦绑定和授权
+
+1. 管理员打开「凭据中心」，新建一条凭据，按上表添加键值。界面默认的 `HOST` / `PORT` / `TOKEN` 不是通用映射，必须使用表中的完整变量名。
+2. 将凭据绑定到对应 MCP 服务器。建议在服务器环境变量中也声明这些变量：普通开关可填固定值，敏感项留空，由绑定的凭据覆盖。凭据中心注入的是进程环境变量，不会自动创建文件，也不会替换 targets JSON 内的 `${VAR}`。
+3. 在凭据绑定处测试连接 / `listTools`。成功仅证明进程和工具列表可用，再到调试台执行下方的只读查询，验证上游凭据。
+4. 在用户授权中勾选这个 MCP、允许的工具以及该 MCP 下绑定的凭据。只绑定凭据并不等于用户已获授权。客户端使用的是月弦签发的 Access Key，不是上游服务的 Token 或密码。
+
+凭据中心加密存储需要月弦配置 `YLUNE_MASTER_KEY`。文件型密码仍由挂载文件保存，不会因为登记了文件路径就被月弦加密；应限制文件权限，并确保月弦容器运行用户可读。多个环境建议建独立服务器和独立凭据，分别指向各自的配置文件；同一进程可读取的 targets 不会因为凭据名称不同而自动隔离。
+
+本服务的连接参数和 Token 已直接通过平台环境变量注入，不需要凭据文件。修改凭据后重新连接对应上游进程使新值生效。
+
+更多平台说明见 YluneMCPHub 的凭据中心和部署文档。本节仅说明配置，不会修改现有月弦服务。

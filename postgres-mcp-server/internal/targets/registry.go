@@ -11,43 +11,58 @@ import (
 )
 
 type Target struct {
-	Name          string   `json:"name"`
-	Aliases       []string `json:"aliases"`
-	Description   string   `json:"description"`
-	Environment   string   `json:"environment"`
-	Host          string   `json:"host"`
-	Port          int      `json:"port"`
-	DBName        string   `json:"dbname"`
-	User          string   `json:"user"`
-	SSLMode       string   `json:"sslmode"`
-	CredentialRef string   `json:"credential_ref"`
-	Tags          []string `json:"tags"`
-	Password      string   `json:"password"`
+	Name             string   `json:"name"`
+	Aliases          []string `json:"aliases"`
+	Description      string   `json:"description"`
+	Environment      string   `json:"environment"`
+	Host             string   `json:"host"`
+	Port             int      `json:"port"`
+	DBName           string   `json:"dbname"`
+	User             string   `json:"user"`
+	SSLMode          string   `json:"sslmode"`
+	CredentialRef    string   `json:"credential_ref"`
+	Tags             []string `json:"tags"`
+	Password         string   `json:"password"`
+	InlineCredential bool     `json:"-"`
 }
+
+// Never serialize credential material.
+func (t Target) MarshalJSON() ([]byte, error) { return json.Marshal(t.PublicView()) }
 
 type fileShape struct {
 	Targets []Target `json:"targets"`
 }
 
 type Registry struct {
-	path string
-	mu   sync.Mutex
-	mod  time.Time
-	list []Target
+	path         string
+	platformJSON string
+	platform     bool
+	mu           sync.Mutex
+	mod          time.Time
+	list         []Target
 }
 
 func New(path string) (*Registry, error) {
-	if path == "" {
-		return nil, fmt.Errorf("PG_TARGETS_FILE is required")
+	inline, platform := os.LookupEnv("PG_TARGETS_JSON")
+	if path == "" && !platform {
+		return nil, fmt.Errorf("PG_TARGETS_FILE or PG_TARGETS_JSON is required")
 	}
-	r := &Registry{path: path}
+	r := &Registry{path: path, platformJSON: inline, platform: platform}
 	if err := r.loadLocked(true); err != nil {
+		if platform {
+			return nil, fmt.Errorf("invalid PG_TARGETS_JSON configuration")
+		}
 		return nil, err
 	}
 	return r, nil
 }
 
-func (r *Registry) Path() string { return r.path }
+func (r *Registry) Path() string {
+	if r.platform {
+		return ""
+	}
+	return r.path
+}
 
 func (r *Registry) List() ([]Target, error) {
 	r.mu.Lock()
@@ -199,29 +214,48 @@ func (t Target) PortOrDefault() int {
 }
 
 func (r *Registry) loadLocked(requireOK bool) error {
-	st, err := os.Stat(r.path)
-	if err != nil {
-		return fmt.Errorf("read targets file %s: %w", r.path, err)
-	}
-	if !requireOK && st.ModTime().Equal(r.mod) && len(r.list) > 0 {
-		return nil
-	}
-	raw, err := os.ReadFile(r.path)
-	if err != nil {
-		return fmt.Errorf("read targets file %s: %w", r.path, err)
+	var raw []byte
+	var mod time.Time
+	if r.platform {
+		if !requireOK {
+			return nil
+		}
+		raw = []byte(r.platformJSON)
+		if len(raw) == 0 || len(raw) > 1<<20 {
+			return fmt.Errorf("platform configuration must be between 1 byte and 1 MiB")
+		}
+	} else {
+		st, err := os.Stat(r.path)
+		if err != nil {
+			return fmt.Errorf("read targets file: %w", err)
+		}
+		if !requireOK && st.ModTime().Equal(r.mod) && len(r.list) > 0 {
+			return nil
+		}
+		mod = st.ModTime()
+		raw, err = os.ReadFile(r.path)
+		if err != nil {
+			return fmt.Errorf("read targets file: %w", err)
+		}
 	}
 	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	var file fileShape
 	if err := json.Unmarshal(raw, &file); err != nil {
 		return fmt.Errorf("parse targets file: %w", err)
 	}
+	if r.platform && (len(file.Targets) == 0 || len(file.Targets) > 100) {
+		return fmt.Errorf("platform configuration requires 1 to 100 targets")
+	}
 	seen := map[string]struct{}{}
 	for i, t := range file.Targets {
 		name := strings.TrimSpace(t.Name)
+		if r.platform && t.Password == "" {
+			return fmt.Errorf("platform target requires password")
+		}
 		if name == "" {
 			return fmt.Errorf("targets[%d].name is required", i)
 		}
-		if strings.TrimSpace(t.Password) != "" {
+		if !r.platform && t.Password != "" {
 			return fmt.Errorf("target %s must not store password in the targets file; use credential_ref or pgpass", name)
 		}
 		if t.Host == "" || t.DBName == "" || t.User == "" {
@@ -233,6 +267,7 @@ func (r *Registry) loadLocked(requireOK bool) error {
 		}
 		seen[key] = struct{}{}
 		file.Targets[i].Name = name
+		file.Targets[i].InlineCredential = r.platform
 		if file.Targets[i].Port == 0 {
 			file.Targets[i].Port = 5432
 		}
@@ -252,6 +287,6 @@ func (r *Registry) loadLocked(requireOK bool) error {
 		}
 	}
 	r.list = file.Targets
-	r.mod = st.ModTime()
+	r.mod = mod
 	return nil
 }

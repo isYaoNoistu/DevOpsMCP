@@ -44,6 +44,6 @@ func (d Deps) GetTargetInfo(_ context.Context, _ *mcp.CallToolRequest, in GetTar
 		return nil, nil, err
 	}
 	view := t.PublicView()
-	view["note"] = "Password is resolved from Windows Credential Manager (credential_ref) or mysqlpass.conf. It is not returned here."
+	view["note"] = "Password comes from platform-injected configuration or local credential storage. It is never returned."
 	return jsonResult(view)
 }

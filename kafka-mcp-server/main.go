@@ -39,8 +39,8 @@ func run() error {
 		return fmt.Errorf("KAFKA_MCP_READ_ONLY must be true")
 	}
 	path := strings.TrimSpace(os.Getenv("KAFKA_TARGETS_FILE"))
-	if path == "" {
-		return fmt.Errorf("set KAFKA_TARGETS_FILE to your private targets JSON file")
+	if _, platform := os.LookupEnv("KAFKA_TARGETS_JSON"); path == "" && !platform {
+		return fmt.Errorf("set KAFKA_TARGETS_JSON or KAFKA_TARGETS_FILE")
 	}
 	reg := targets.New(path)
 	if _, err := reg.List(); err != nil {

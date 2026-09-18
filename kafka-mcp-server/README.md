@@ -70,7 +70,7 @@ KAFKA_TARGETS_FILE = "D:/project/CICD/.codex/kafka-targets.json"
 KAFKA_MCP_READ_ONLY = "true"
 ```
 
-KAFKA_TARGETS_FILE 必填；KAFKA_MCP_READ_ONLY 缺省即 true，设置其他值会拒绝启动，不能借此打开写能力。诊断日志写 stderr；stdout 保留给 MCP。`--version` 可单独查询版本。
+本地文件模式下 KAFKA_TARGETS_FILE 必填；平台模式改用 KAFKA_TARGETS_JSON，见下方平台凭据章节。KAFKA_MCP_READ_ONLY 缺省即 true，设置其他值会拒绝启动，不能借此打开写能力。诊断日志写 stderr；stdout 保留给 MCP。`--version` 可单独查询版本。
 
 ## 工具与边界
 
@@ -100,3 +100,57 @@ peek 默认 max_records=5（上限 20）、max_bytes=16384（上限 65536）、i
 响应包含 target、operation、sampled_at（UTC）、scope、status、truncated 和 data。读取 data 中的分区/资源错误以及截断信息，不能只看外层 status。权限不足、超时、目标不可用与不支持 API 都不是业务系统正常的证据。诊断按“证据 → 字段含义 → 分析”组织：先用现有夜莺指标确认时间窗，再定位 group/topic/config/offset，最后关联获准的主机和应用日志。
 
 能力查询会在连接失败时切换到其他可用 broker，返回的是一个可达 broker 的协议能力，不代表所有节点版本一致。消费组查询兼容 classic 和新版 consumer 协议，结果中的 `group_type` 区分两者；classic 查询返回 Dead 或组不存在时，先检查协调器是否支持新版接口，再补充查询。权限错误或连接故障不会被当作组不存在。
+
+## 对接 YluneMCPHub：平台凭据模式（不需要凭据文件）
+
+平台模式通过月弦凭据中心注入环境变量，连接参数和凭据直接在内存解析，不需要 targets 文件、密码文件或密钥文件。原有文件模式继续供智能体本地直连使用。
+
+1. 将 Linux 二进制放入月弦可执行的位置。默认 Docker 挂载 `/data/ylune-mcp` → `/opt/mcp`，这里只需放程序，不用放凭据文件。新建 STDIO 服务器，命令 `/opt/mcp/kafka-mcp-server`，参数留空。平台原生部署则填实际二进制绝对路径。
+2. 在「凭据中心」新建一条凭据，填写下面两个键，绑定该服务器：
+
+| 凭据键 | 填写内容 |
+| --- | --- |
+| `KAFKA_TARGETS_JSON` | 下方完整 JSON 文本，不是文件路径，也不用加外层引号 |
+| `KAFKA_MCP_READ_ONLY` | `true` |
+
+```json
+{
+  "targets": [
+    {
+      "name": "uat",
+      "brokers": [
+        "kafka.example.com:9092"
+      ],
+      "topics": [
+        "*"
+      ],
+      "groups": [
+        "*"
+      ],
+      "allow_payload": false
+    }
+  ]
+}
+```
+
+JSON 中的占位内容在凭据中心替换为真实值；不提交到仓库。月弦负责加密存储和运行时注入，需要正确配置 `YLUNE_MASTER_KEY`。默认的 HOST / PORT / TOKEN 字段不会自动映射，请使用表中精确变量名。
+
+无认证 Kafka 使用上面示例即可。启用认证时，在同一 target 增加：
+
+```json
+"sasl": {"mechanism": "SCRAM-SHA-512", "username": "mcp_ro", "password": "<kafka-password>"},
+"tls": {"enabled": true, "server_name": "kafka.example.com"}
+```
+
+上述是需要合并到 target 的字段片段。私有 CA 可填 `tls.ca_pem`；双向 TLS 再填 `tls.cert_pem` 和 `tls.key_pem`，均为完整 PEM 文本（JSON 内换行写 `\n`）。使用系统信任 CA 时省略 `ca_pem`。平台模式不接受 `ca_file` / `cert_file` / `key_file`，不关闭证书验证。
+
+3. 在该凭据的绑定处测试工具列表，再用调试台调用 `list_targets` 和一次实际只读查询，分别验证配置及上游认证。仅列出目标/工具不能证明已连接上游。
+4. 在月弦用户授权中勾选该 MCP、允许的工具和绑定凭据。客户端使用月弦 Access Key，上游密码不交给智能体。
+
+### 与本地文件模式的兼容
+
+- 未设置 `KAFKA_TARGETS_JSON` 时，沿用 `KAFKA_TARGETS_FILE` 和原有文件配置。
+- 只要设置了 `KAFKA_TARGETS_JSON`（即使为空），就优先采用平台模式；空值、格式错误、缺少必要字段均报错，不回退到文件。平台服务器无需再声明 `KAFKA_TARGETS_FILE`。
+- 配置是每个 MCP 进程启动时的快照。修改/轮换凭据后，在月弦重新连接或重启对应上游进程，使新环境变量生效；不会靠修改文件热更新平台凭据。
+- 建议每个环境一台服务器、一条凭据。JSON 的 targets 可以有多个目标，但同一实例授权用户可访问该清单内的目标，不会按凭据名称自动细分权限。
+- 平台 JSON 最多 1 MiB、最多 100 个目标；实际还受操作系统环境变量大小限制，大型清单应拆分为独立实例。敏感字段不会进入目标列表和配置错误文本，也不会由 MCP 写入临时凭据文件。

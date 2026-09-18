@@ -98,3 +98,48 @@ HOST_LOGS_READ_ONLY = "true"
 保存后重启对应 MCP 连接。CLI 可用 `codex mcp list` 检查配置、在会话中用 `/mcp` 核对连接；握手成功后再做小范围远端只读查询。
 
 添加步骤、字段解释、凭据、环境切换和排障见 [Codex 完整指南](../CODEX.md)；可复制 [五服务 TOML](../examples/codex.toml.example) 或 [多环境 TOML](../examples/codex.multi-env.toml.example)。
+
+## 对接 YluneMCPHub：平台凭据模式（不需要凭据文件）
+
+平台模式通过月弦凭据中心注入环境变量，连接参数和凭据直接在内存解析，不需要 targets 文件、密码文件或密钥文件。原有文件模式继续供智能体本地直连使用。
+
+1. 将 Linux 二进制放入月弦可执行的位置。默认 Docker 挂载 `/data/ylune-mcp` → `/opt/mcp`，这里只需放程序，不用放凭据文件。新建 STDIO 服务器，命令 `/opt/mcp/host-logs-mcp-server`，参数留空。平台原生部署则填实际二进制绝对路径。
+2. 在「凭据中心」新建一条凭据，填写下面两个键，绑定该服务器：
+
+| 凭据键 | 填写内容 |
+| --- | --- |
+| `HOST_LOGS_TARGETS_JSON` | 下方完整 JSON 文本，不是文件路径，也不用加外层引号 |
+| `HOST_LOGS_READ_ONLY` | `true` |
+
+```json
+{
+  "targets": [
+    {
+      "name": "uat",
+      "host": "host.example.com",
+      "port": 22,
+      "user": "mcp_logs",
+      "password": "<ssh-password>",
+      "host_key_sha256": "SHA256:<verified-host-key-fingerprint>",
+      "paths": [
+        "/var/log/nginx"
+      ]
+    }
+  ]
+}
+```
+
+JSON 中的占位内容在凭据中心替换为真实值；不提交到仓库。月弦负责加密存储和运行时注入，需要正确配置 `YLUNE_MASTER_KEY`。默认的 HOST / PORT / TOKEN 字段不会自动映射，请使用表中精确变量名。
+
+密钥认证时去掉 `password`，改填 `private_key`（完整 PEM/OpenSSH 私钥文本，JSON 内换行写 `\n`）；加密私钥再填 `private_key_passphrase`。密码和私钥可同时配置，保持原有双兼容行为。平台 SSH 模式不接受 `identity_file`，必须填 `host_key_sha256`，以免依赖本机 known_hosts。指纹须从可信渠道核验，例如在目标主机执行 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256` 并使用其 SHA256 指纹。不得直接信任未经核验的网络扫描结果。`paths` 是目标主机的日志白名单。
+
+3. 在该凭据的绑定处测试工具列表，再用调试台调用 `list_targets` 和一次实际只读查询，分别验证配置及上游认证。仅列出目标/工具不能证明已连接上游。
+4. 在月弦用户授权中勾选该 MCP、允许的工具和绑定凭据。客户端使用月弦 Access Key，上游密码不交给智能体。
+
+### 与本地文件模式的兼容
+
+- 未设置 `HOST_LOGS_TARGETS_JSON` 时，沿用 `HOST_LOGS_TARGETS_FILE` 和原有文件配置。
+- 只要设置了 `HOST_LOGS_TARGETS_JSON`（即使为空），就优先采用平台模式；空值、格式错误、缺少必要字段均报错，不回退到文件。平台服务器无需再声明 `HOST_LOGS_TARGETS_FILE`。
+- 配置是每个 MCP 进程启动时的快照。修改/轮换凭据后，在月弦重新连接或重启对应上游进程，使新环境变量生效；不会靠修改文件热更新平台凭据。
+- 建议每个环境一台服务器、一条凭据。JSON 的 targets 可以有多个目标，但同一实例授权用户可访问该清单内的目标，不会按凭据名称自动细分权限。
+- 平台 JSON 最多 1 MiB、最多 100 个目标；实际还受操作系统环境变量大小限制，大型清单应拆分为独立实例。敏感字段不会进入目标列表和配置错误文本，也不会由 MCP 写入临时凭据文件。
