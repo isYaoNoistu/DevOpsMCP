@@ -1,0 +1,18 @@
+{
+  "targets": [
+    {
+      "name": "example-secure",
+      "description": "虚构 TLS SCRAM 配置；仅复制到本地私有文件后填写",
+      "brokers": ["kafka.example.com:9093"],
+      "tls": {"enabled": true, "server_name": "kafka.example.com"},
+      "sasl": {
+        "mechanism": "SCRAM-SHA-512",
+        "username": "example-readonly",
+        "password": "<replace-only-in-private-local-file>"
+      },
+      "topics": ["demo-events"],
+      "groups": ["demo-reader-*"],
+      "allow_payload": false
+    }
+  ]
+}

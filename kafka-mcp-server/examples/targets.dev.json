@@ -1,0 +1,12 @@
+{
+  "targets": [
+    {
+      "name": "local-dev",
+      "description": "仅本地开发的明文 Kafka 示例",
+      "brokers": ["127.0.0.1:9092"],
+      "topics": ["demo-events", "demo-audit-*"],
+      "groups": ["demo-reader-*"],
+      "allow_payload": false
+    }
+  ]
+}

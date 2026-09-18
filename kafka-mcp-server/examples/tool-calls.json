@@ -1,0 +1,10 @@
+[
+  {"name":"list_targets","arguments":{}},
+  {"name":"get_target_info","arguments":{"target":"local-dev"}},
+  {"name":"kafka_capabilities","arguments":{"target":"local-dev"}},
+  {"name":"kafka_configs_query","arguments":{"target":"local-dev","resource_type":"topic","resource_names":["demo-events"],"config_keys":["cleanup.policy","retention.ms"],"include_synonyms":true}},
+  {"name":"kafka_topic_inspect","arguments":{"target":"local-dev","topic":"demo-events"}},
+  {"name":"kafka_group_inspect","arguments":{"target":"local-dev","group":"demo-reader-1"}},
+  {"name":"kafka_offsets_query","arguments":{"target":"local-dev","topic":"demo-events","partition":0,"timestamp_ms":1700000000000}},
+  {"name":"kafka_records_peek","arguments":{"target":"local-dev","topic":"demo-events","partition":0,"start_offset":0,"max_records":5,"max_bytes":16384,"include_value":false,"isolation_level":"read_committed"}}
+]

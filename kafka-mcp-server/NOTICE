@@ -1,0 +1,17 @@
+Kafka MCP V1 uses third-party Go modules. License texts are in licenses/.
+The test-only kfake component is not compiled into the MCP executable.
+
+github.com/golang-jwt/jwt/v5
+github.com/google/go-cmp
+github.com/google/jsonschema-go
+github.com/klauspost/compress
+github.com/modelcontextprotocol/go-sdk
+github.com/pierrec/lz4/v4
+github.com/twmb/franz-go
+github.com/twmb/franz-go/pkg/kadm
+github.com/twmb/franz-go/pkg/kfake
+github.com/twmb/franz-go/pkg/kmsg
+github.com/yosida95/uritemplate/v3
+golang.org/x/crypto
+golang.org/x/oauth2
+golang.org/x/tools

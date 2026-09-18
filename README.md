@@ -291,3 +291,7 @@ cd ../host-logs-mcp-server && go test ./...
 ## Codex 配置指南
 
 五个服务的添加步骤、TOML 配置、凭据和 UAT / PROD 多环境方案见 [Codex 接入与多环境配置](CODEX.md)。每个服务 README 都提供可复制的独立配置。
+
+## Kafka MCP V1（开发中）
+
+新增独立只读 Kafka 排障模块，提供目标发现、协议能力、配置、Topic、消费组、位点与受限消息抽样。开发代码仅在本仓库，未迁移到 cicd；构建及 Codex 接入见 [Kafka MCP README](kafka-mcp-server/README.md)，使用流程见 [Kafka Skill](.cursor/skills/kafka/SKILL.md)。

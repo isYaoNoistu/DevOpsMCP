@@ -1,0 +1,5 @@
+*.exe
+*.exe~
+/kafka-mcp-server
+*.log
+.env
