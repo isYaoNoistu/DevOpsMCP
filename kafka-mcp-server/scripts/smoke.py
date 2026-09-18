@@ -25,7 +25,7 @@ def fixture_path(directory):
 
 def main():
     module = Path(__file__).resolve().parents[1]
-    default = module.parent.parent / "dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe"
+    default = module.parent.parent / "dist/devopsmcp-windows-amd64/kafka-mcp-server.exe"
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=default)
     args = parser.parse_args()

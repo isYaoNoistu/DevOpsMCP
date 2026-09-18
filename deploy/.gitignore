@@ -2,3 +2,4 @@
 pgpass
 *.pgpass
 dist/
+__pycache__/

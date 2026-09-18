@@ -1,6 +1,6 @@
 # 0.2.0-trial 验收记录
 
-验收日期：2026-09-18。范围仅为 Kafka MCP；源码修改未提交，构建版本标记 dirty，具体源码清单和二进制哈希见 dist/build-info.json。
+验收日期：2026-09-18。范围仅为 Kafka MCP；源码修改未提交，构建版本标记 dirty，具体源码清单和二进制哈希见 dist/kafka-mcp-server.build-info.json。
 
 ## 已通过
 

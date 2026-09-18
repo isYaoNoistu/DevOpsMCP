@@ -1,149 +1,22 @@
-# DevOpsMCP deploy
+# DevOpsMCP 打包
 
-本目录是**默认发布入口**：Linux / Windows 打包脚本，以及接到月弦时的挂载与注册。
+这里只负责打包，不安装、启动、挂载或注册服务，不读取连接凭据。
+需要 Python 3、Go 1.26+；没有 Go 时自动使用 Docker 的 golang:1.26-bookworm 镜像编译。
+首次构建需要下载依赖或镜像。
 
-| 你要干什么 | 跑什么 |
-| --- | --- |
-| 本机 Cursor / WorkBuddy 用（Windows） | `pack-windows.cmd` |
-| 本机或服务器用（Linux） | `./pack-linux.sh` |
-| 在 Linux 上交叉编出 Windows zip | `./pack-windows.sh` |
-| 月弦 Docker 已启动，把 MCP 挂进去并注册 | 先起月弦，再 `./attach.sh` |
+在 deploy 目录执行，不传任何参数：
 
-编译五个二进制共用 `compile.py`（有 Go 本机编，没有就用 `golang:1.26-bookworm`）。`deploy/dist/` 不进 git。
+- Linux：`bash pack-linux.sh`
+- Windows：`pack-windows.cmd` 或 `./pack-windows.ps1`
+- Linux 上打 Windows 包：`bash pack-windows.sh`
 
-仓库和 `.env` 里不要写真实 Token、生产密码、内网主机名。
+脚本自动创建 deploy/dist，固定打包 amd64，生成：
 
----
-
-## 1. Linux 打包
-
-```bash
-cd deploy
-chmod +x pack-linux.sh pack-windows.sh attach.sh
-./pack-linux.sh
-```
-
-产出：
-
-- `dist/devopsmcp-linux-amd64/` — 五个 ELF + `examples/` + `PACK.txt`
 - `dist/devopsmcp-linux-amd64.tar.gz`
+- `dist/devopsmcp-windows-amd64.zip`
 
-```bash
-./pack-linux.sh --arch arm64
-./pack-linux.sh --outdir /tmp/mcp --no-archive
-./pack-linux.sh --docker          # 强制走镜像
-```
+包内包含夜莺、Jenkins、PostgreSQL、MySQL、主机日志、Kafka 六个二进制，以及公开配置示例、使用文档、许可证和 SHA256SUMS。
+解压后自行在 MCP 客户端配置二进制路径和私有连接配置；示例路径和凭据需要替换。
 
-国内可设 `GOPROXY=https://goproxy.cn,direct`。无密钥样例来自仓库 `examples/`，解压后把 `command` 改成这个目录的绝对路径。
-
----
-
-## 2. Windows 打包
-
-本机（PowerShell / cmd）：
-
-```bat
-cd deploy
-pack-windows.cmd
-```
-
-或：
-
-```powershell
-.\pack-windows.ps1
-.\pack-windows.ps1 -Arch arm64
-.\pack-windows.ps1 -Docker
-```
-
-产出 `dist/devopsmcp-windows-amd64/`（五个 `.exe`）和 `.zip`。
-
-在 Linux / CI 上交叉编译同样一份 zip：
-
-```bash
-./pack-windows.sh
-```
-
-不要把 Windows `.exe` 挂进月弦 Linux 容器。
-
----
-
-## 3. 接到月弦（YLune）
-
-月弦怎么启动仍看它自己的 `deploy/`：`docker compose up -d --build`。容器固定挂 `/opt/mcp`（宿主机默认 `/data/ylune-mcp`）。
-
-本脚本：往挂载点写 **Linux** 二进制、可选生成 Postgres 清单/pgpass、按 `.env` 调月弦 API 注册。
-
-```text
-/data/YLuneMCPHub     # 月弦，先启动
-/data/DevOpsMCP       # 本仓库
-/data/ylune-mcp       # 挂载点，不进 git
-```
-
-```bash
-cd /data/YLuneMCPHub/deploy
-cp .env.example .env    # ADMIN_PASSWORD、DB_PASSWORD
-docker compose up -d --build
-
-cd /data/DevOpsMCP/deploy
-cp .env.example .env    # Token；REGISTER_* ；改过管理员密码则写 YLUNE_PASSWORD
-./attach.sh
-```
-
-脚本会找 `/data/YLuneMCPHub` 和容器 `ylune` 的 `/opt/mcp`。然后在月弦控制台确认已连接，再**分组、加成员**。管理员不必入组。
-
-### `.env` 注册开关
-
-| 变量 | 默认 | 作用 |
-| --- | --- | --- |
-| `REGISTER_NIGHTINGALE` | `true` | 注册 `nightingale`（还要 `N9E_TOKEN`） |
-| `REGISTER_JENKINS` | `true` | 注册 `jenkins`（还要 `JENKINS_API_TOKEN`） |
-| `REGISTER_POSTGRES` | `false` | 写 targets + pgpass，并注册 `postgres` |
-| `REGISTER_MYSQL` | `false` | 写 targets + mysqlpass，并注册 `mysql` |
-| `REGISTER_HOST_LOGS` | `false` | 若挂载目录已有 `host-logs-targets.json` 则注册 `host-logs`。默认关：需要私有主机配置；密码模式无需 ssh/私钥 |
-| `YLUNE_HOME` / `YLUNE_URL` / `MCP_MOUNT_DIR` | 自动找 | 对不上再手填 |
-| `YLUNE_PASSWORD` | 可回落首次 `ADMIN_PASSWORD` | 控制台当前密码 |
-
-同机夜莺 / Jenkins / 库用 `host.docker.internal`，不要 `127.0.0.1`。已有 pg / mysql 文件默认不覆盖：`OVERWRITE_PG_CONFIG=true` / `OVERWRITE_MYSQL_CONFIG=true` 才重写。
-
-```bash
-./attach.sh
-./attach.sh --build-only
-./attach.sh --register-only
-./attach.sh --discover
-```
-
----
-
-## 4. 本目录文件
-
-| 文件 | 说明 |
-| --- | --- |
-| `compile.py` | 真正执行 `go build` / docker 编译 |
-| `pack-linux.sh` | Linux 默认打包 |
-| `pack-windows.ps1` / `.cmd` | Windows 默认打包 |
-| `pack-windows.sh` | 在 Linux 上打 Windows 包 |
-| `attach.sh` | 写进月弦挂载点并注册 |
-| `register.py` | 找月弦、写 pg / mysql 文件、调 API |
-| `.env.example` | attach 用，复制为 `.env`，勿提交 |
-| `templates/postgres-targets.json` | 文档用样例（attach 按 `.env` 生成） |
-| `templates/mysql-targets.json` | 文档用样例（attach 按 `.env` 生成） |
-
----
-
-## 5. 常见失败
-
-| 现象 | 处理 |
-| --- | --- |
-| `need Go 1.26+ or Docker` | 安装 Go，或 Docker 能拉 `golang:1.26-bookworm` |
-| `go: command not found`（docker 编译） | 旧脚本用了 `bash -lc`，登录壳会冲掉镜像 PATH。更新 `compile.py` 后再 `./pack-linux.sh`。临时也可：`sed -i 's/"-lc"/"-c"/' compile.py` |
-| 包里是 PE32 / `.exe` 却挂进 Linux 容器 | 用 `pack-linux.sh` 或 `attach.sh`，不要用 Windows 包 |
-| `missing deploy/.env` | 仅 attach 需要；打包脚本不需要 `.env` |
-| 容器没有 `/opt/mcp` | 更新月弦仓后 `docker compose up -d` |
-| 登录月弦失败 | 控制台已改密，写 `YLUNE_PASSWORD` |
-| 普通用户 `/mcp` 没工具 | 还没进组 |
-
-本机不经过月弦、直接 stdio 的字段说明仍看仓库根 README。
-
-## Codex 配置指南
-
-五个服务的添加步骤、TOML 配置、凭据和 UAT / PROD 多环境方案见 [Codex 接入与多环境配置](../CODEX.md)。每个服务 README 都提供可复制的独立配置。
+每次使用新的临时目录构建，全部成功后替换对应压缩包；失败保留上次成功的包。临时目录自动清理，不打包旧输出目录里的私有文件。dist 不进入 Git。
+旧挂载、自动注册脚本和注册模板已移除。打包不会修改客户端配置。

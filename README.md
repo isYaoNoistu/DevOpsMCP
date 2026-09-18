@@ -138,7 +138,7 @@ cd DevOpsMCP/deploy
 pack-windows.cmd
 ```
 
-产物在 `deploy\dist\devopsmcp-windows-amd64\`（五个 `.exe` + 样例）。
+产物在 `deploy/dist/devopsmcp-windows-amd64.zip`（六个 `.exe` + 样例）。
 
 **Linux：**
 
@@ -147,14 +147,14 @@ chmod +x pack-linux.sh
 ./pack-linux.sh
 ```
 
-产物在 `deploy/dist/devopsmcp-linux-amd64/`。
+产物在 `deploy/dist/devopsmcp-linux-amd64.tar.gz`。
 
 1. 打开包里的 `examples/mcp.json.example`（或仓库根目录同一份）。
 2. 把 `command` 换成**该目录里二进制的绝对路径**（Windows 指向 `.exe`），把 URL / Token 换成你们环境的。`PG_TARGETS_FILE` / `MYSQL_TARGETS_FILE` / `HOST_LOGS_TARGETS_FILE` 指向本机任意路径的 targets 文件。
 3. **WorkBuddy**：粘进 MCP 配置或写入 `~/.workbuddy/mcp.json`。**Cursor**：写入 `~/.cursor/mcp.json`。
 4. Codex：按 `[examples/codex.toml.example](examples/codex.toml.example)` 写进 `config.toml`。
 
-接到已经在跑的月弦（Docker 挂载点 + 自动注册）：见 [deploy/README.md](deploy/README.md) 第 3 节，不要用手填 STDIO 表单。
+打包入口不传参数，只生成压缩包，不挂载或注册服务。见 [打包说明](deploy/README.md)。
 
 也可以仍在各模块目录手敲 `go build`（Windows 带 `.exe`）。日常请走 `deploy/pack-*.`。
 
@@ -238,7 +238,7 @@ Agent 不得声称已经重跑构建、屏蔽告警、杀掉会话、改过数�
 
 | 先看这个                                                                                      | 再往下                                                                                     |
 | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [打包 / 接到月弦](deploy/README.md) | Linux / Windows 默认打包；Docker 月弦挂载与自动注册 |
+| [打包](deploy/README.md) | Linux / Windows 无参数打包，包含 Kafka |
 | [适配的智能体](#适配的智能体) | [mcp.json 样例](examples/mcp.json.example) · [社区版子集](examples/mcp.json.cursor-community.example.json) · [Codex TOML 样例](examples/codex.toml.example) |
 | [夜莺：拿 Token](n9e-mcp-server/README.md#如何拿到夜莺-token)                                       | [夜莺工具表与 mcp.json](n9e-mcp-server/README.md)                                             |
 | [Jenkins：建用户 + API Token](jenkins-mcp-server/README.md#如何创建-jenkins-只读用户和-api-token)      | [Jenkins 工具表与排障顺序](jenkins-mcp-server/README.md)                                        |
@@ -259,7 +259,7 @@ jenkins-mcp-server/      Jenkins 只读 MCP（裁自 jenkins-mcp-go，MIT）
 postgres-mcp-server/     PostgreSQL 多 target 只读 MCP
 mysql-mcp-server/        MySQL 多 target 只读 MCP
 host-logs-mcp-server/    主机日志多 target 只读 MCP（allowlist，无 exec）
-deploy/                  Linux / Windows 打包；接到月弦的 attach
+deploy/                  Packaging only: Linux / Windows archives
 lab/postgres/            本机 Docker PostgreSQL 实验室 + 验收清单
 lab/mysql/               本机 Docker MySQL 实验室 + 验收清单
 lab/host-logs/           本机夹具日志实验室 + 验收清单
@@ -294,4 +294,4 @@ cd ../host-logs-mcp-server && go test ./...
 
 ## Kafka MCP（生产试用候选）
 
-独立 Kafka 模块提供 10 个只读工具，覆盖目标及白名单内 Topic/消费组发现、协议能力、配置、显式 topic 范围的消费组提交位置、位点和受限消息采样。生产试用构建附带版本、Git revision/dirty 标记、时间戳、SHA-256 和构建清单；不在现有五服务正式打包流程中。开发代码仅在本仓库，未迁移到 cicd；构建及接入见 [Kafka MCP README](kafka-mcp-server/README.md)，使用流程见 [Kafka Skill](.cursor/skills/kafka/SKILL.md)。离线测试和打包成功不代表生产环境验收完成。
+独立 Kafka 模块提供 10 个只读工具，覆盖目标及白名单内 Topic/消费组发现、协议能力、配置、显式 topic 范围的消费组提交位置、位点和受限消息采样。生产试用构建附带版本、Git revision/dirty 标记、时间戳、SHA-256 和构建清单；已纳入 deploy 六服务统一打包流程。开发代码仅在本仓库，未迁移到 cicd；构建及接入见 [Kafka MCP README](kafka-mcp-server/README.md)，使用流程见 [Kafka Skill](.cursor/skills/kafka/SKILL.md)。离线测试和打包成功不代表生产环境验收完成。

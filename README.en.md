@@ -130,7 +130,7 @@ cd DevOpsMCP/deploy
 pack-windows.cmd
 ```
 
-Output: `deploy\dist\devopsmcp-windows-amd64\` (five `.exe` files + examples).
+Output: `deploy/dist/devopsmcp-windows-amd64.zip` (six `.exe` files + examples).
 
 **Linux:**
 
@@ -139,14 +139,14 @@ chmod +x pack-linux.sh
 ./pack-linux.sh
 ```
 
-Output: `deploy/dist/devopsmcp-linux-amd64/`.
+Output: `deploy/dist/devopsmcp-linux-amd64.tar.gz`.
 
 1. Open `examples/mcp.json.example` inside the pack (same file as the repo root).
 2. Set `command` to an **absolute path of a binary in that folder** (Windows: `.exe`). Replace URLs and tokens. `PG_TARGETS_FILE` / `MYSQL_TARGETS_FILE` / `HOST_LOGS_TARGETS_FILE` may be any local path.
 3. **WorkBuddy**: paste into MCP settings or write `~/.workbuddy/mcp.json`. **Cursor**: write `~/.cursor/mcp.json`.
 4. Codex: copy [`examples/codex.toml.example`](examples/codex.toml.example) into `config.toml`.
 
-Attaching to a running YLune (Docker mount + API register): [deploy/README.md](deploy/README.md) section 3.
+Packaging takes no arguments and only creates archives; it does not mount or register services. See [deploy/README.md](deploy/README.md).
 
 You can still `go build` by hand in each module. Day-to-day, use `deploy/pack-*`.
 
@@ -229,7 +229,7 @@ Service READMEs below are Chinese.
 
 | Start here | Then |
 | --- | --- |
-| [Pack / attach to YLune](deploy/README.md) | Linux/Windows default packs; Docker hub mount + register |
+| [Packaging](deploy/README.md) | No-argument Linux/Windows packaging, including Kafka |
 | [Compatible agents](#compatible-agents) | [mcp.json example](examples/mcp.json.example) · [Community subset](examples/mcp.json.cursor-community.example.json) · [Codex TOML example](examples/codex.toml.example) |
 | [Nightingale: get a token](n9e-mcp-server/README.md#如何拿到夜莺-token) | [Nightingale tools and mcp.json](n9e-mcp-server/README.md) |
 | [Jenkins: user + API token](jenkins-mcp-server/README.md#如何创建-jenkins-只读用户和-api-token) | [Jenkins tools and diagnosis order](jenkins-mcp-server/README.md) |
@@ -247,7 +247,7 @@ jenkins-mcp-server/      Jenkins read-only MCP (trimmed jenkins-mcp-go, MIT)
 postgres-mcp-server/     Multi-target PostgreSQL read-only MCP
 mysql-mcp-server/        Multi-target MySQL read-only MCP
 host-logs-mcp-server/    Multi-target host-log MCP (allowlist, no exec)
-deploy/                  Linux/Windows packs; attach to YLune
+deploy/                  Packaging only: Linux / Windows archives
 lab/postgres/            Local Docker PostgreSQL lab + checklist
 lab/mysql/               Local Docker MySQL lab + checklist
 lab/host-logs/           Local fixture logs + checklist
@@ -283,4 +283,4 @@ See the [Codex setup guide (Chinese)](CODEX.md) for installation, TOML fields, c
 
 ## Kafka MCP (production trial candidate)
 
-The independent Kafka module provides 10 read-only tools for local targets, allowlisted topic/group discovery, capabilities, configuration, group commits with explicit topic scope, offsets and bounded record samples. Trial builds include version, Git revision/dirty marker, build time, SHA-256 and a build manifest; the module is separate from the existing five-service packaging. Code remains in this repository with no cicd migration. See the [Kafka README](kafka-mcp-server/README.md) and [Kafka Skill](.cursor/skills/kafka/SKILL.md). Successful offline tests and packaging do not establish production acceptance.
+The independent Kafka module provides 10 read-only tools for local targets, allowlisted topic/group discovery, capabilities, configuration, group commits with explicit topic scope, offsets and bounded record samples. Trial builds include version, Git revision/dirty marker, build time, SHA-256 and a build manifest; the module is included in deploy packaging alongside the other five services. Code remains in this repository with no cicd migration. See the [Kafka README](kafka-mcp-server/README.md) and [Kafka Skill](.cursor/skills/kafka/SKILL.md). Successful offline tests and packaging do not establish production acceptance.

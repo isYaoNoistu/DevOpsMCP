@@ -6,6 +6,8 @@
 
 ## 构建与离线验收
 
+日常发布使用仓库 deploy：Linux 执行 `bash pack-linux.sh`，Windows 执行 `pack-windows.cmd`，均不传参数；六服务压缩包输出到 `deploy/dist/`。详见 [打包说明](../deploy/README.md)。下方模块脚本用于单模块开发验证。
+
 需要 Go 1.26 或更新版本；首次构建需要下载 go.mod 中的依赖。在模块目录执行：
 
 ```powershell
@@ -15,9 +17,9 @@ go vet ./...
 py -3 ./scripts/smoke.py
 ```
 
-构建脚本从模块路径推导仓库外输出目录，本工作区为 `D:/project/CICD/dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe`，关闭 CGO，只构建当前模块，不清理其他产物。先构建独立临时文件，再替换默认路径，不生成 `.exe~` 备份；默认文件被客户端占用时保留原文件并输出带版本名的新文件，不终止现有进程。此时 smoke 使用 `--binary <新文件路径>` 指定新产物。
+构建脚本从模块路径推导仓库外输出目录，本工作区为 `D:/project/CICD/dist/devopsmcp-windows-amd64/kafka-mcp-server.exe`，关闭 CGO，只构建当前模块，不清理其他产物。先构建独立临时文件，再替换默认路径，不生成 `.exe~` 备份；默认文件被客户端占用时保留原文件并输出带版本名的新文件，不终止现有进程。此时 smoke 使用 `--binary <新文件路径>` 指定新产物。
 
-`--version` 输出版本、Git 短 revision（工作区有修改时附 `-dirty`）和 UTC 构建时间。随包包含可核对的 `<二进制文件名>.sha256`、`build-info.json`（二进制哈希、完整 commit、dirty 标记、模块源文件哈希、Go/平台及构建参数）、`kafka-mcp-licenses/` 和 `kafka-mcp-docs/`。文档包保留模块 README、公开示例和 Kafka Skill；不会复制私有 target 或凭据。dirty 构建需结合源文件哈希识别实际内容，commit 本身不足以复现未提交修改。
+`--version` 输出版本、Git 短 revision（工作区有修改时附 `-dirty`）和 UTC 构建时间。随包包含可核对的 `<二进制文件名>.sha256`、`kafka-mcp-server.build-info.json`（二进制哈希、完整 commit、dirty 标记、模块源文件哈希、Go/平台及构建参数）、`kafka-mcp-licenses/` 和 `kafka-mcp-docs/`。文档包保留模块 README、公开示例和 Kafka Skill；不会复制私有 target 或凭据。dirty 构建需结合源文件哈希识别实际内容，commit 本身不足以复现未提交修改。
 
 smoke 使用临时 localhost 配置，执行 `--version`、MCP initialize、tools/list（10 个只读工具）和 list_targets；不会连接 Kafka。离线成功只说明本地加载和 stdio 协议可用。
 
@@ -27,7 +29,7 @@ smoke 使用临时 localhost 配置，执行 `--version`、MCP initialize、tool
 
 ```powershell
 py -3 ./scripts/acceptance.py `
-  --binary D:/project/CICD/dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe `
+  --binary D:/project/CICD/dist/devopsmcp-windows-amd64/kafka-mcp-server.exe `
   --targets D:/project/CICD/.codex/kafka-targets.json `
   --target local-uat --topic mcp-events --group mcp-lag-group `
   --config-topic mcp-config-test --expected-retention-ms 21600000
@@ -53,7 +55,7 @@ py -3 ./scripts/acceptance.py `
 
 | 字段 | 值 |
 | --- | --- |
-| Command | `D:/project/CICD/dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe` |
+| Command | `D:/project/CICD/dist/devopsmcp-windows-amd64/kafka-mcp-server.exe` |
 | KAFKA_TARGETS_FILE | `D:/project/CICD/.codex/kafka-targets.json` |
 | KAFKA_MCP_READ_ONLY | `true` |
 
@@ -61,7 +63,7 @@ py -3 ./scripts/acceptance.py `
 
 ```toml
 [mcp_servers.kafka-dev]
-command = "D:/project/CICD/dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe"
+command = "D:/project/CICD/dist/devopsmcp-windows-amd64/kafka-mcp-server.exe"
 
 [mcp_servers.kafka-dev.env]
 KAFKA_TARGETS_FILE = "D:/project/CICD/.codex/kafka-targets.json"

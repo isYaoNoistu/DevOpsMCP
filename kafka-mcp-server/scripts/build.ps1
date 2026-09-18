@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $moduleRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent $moduleRoot
 $workspaceRoot = Split-Path -Parent $repoRoot
-$outputDirectory = Join-Path $workspaceRoot 'dist/devopsmcp-dev-windows-amd64'
+$outputDirectory = Join-Path $workspaceRoot 'dist/devopsmcp-windows-amd64'
 $outputFile = Join-Path $outputDirectory 'kafka-mcp-server.exe'
 $stagedFile = Join-Path $outputDirectory ('kafka-mcp-build-' + [guid]::NewGuid().ToString('N') + '.exe')
 if ($Version -notmatch '^[0-9A-Za-z.+-]+$') { throw 'Version must contain only letters, digits, dots, plus and hyphens' }
@@ -97,7 +97,7 @@ try {
         build = [ordered]@{ go_version = $goVersion; goos = 'windows'; goarch = 'amd64'; cgo_enabled = '0'; trimpath = $true; ldflags = $ldflags }
         version_output = $versionOutput
     }
-    [System.IO.File]::WriteAllText((Join-Path $outputDirectory 'build-info.json'), (ConvertTo-Json -InputObject $buildInfo -Depth 8) + "`n", [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText((Join-Path $outputDirectory 'kafka-mcp-server.build-info.json'), (ConvertTo-Json -InputObject $buildInfo -Depth 8) + "`n", [System.Text.UTF8Encoding]::new($false))
     Write-Output $outputFile
 } finally {
     if (Test-Path -LiteralPath $stagedFile -PathType Leaf) { Remove-Item -LiteralPath $stagedFile -Force }

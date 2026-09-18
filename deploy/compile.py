@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Compile the DevOpsMCP stdio binaries (Linux ELF or Windows exe).
 
-Used by pack-linux.sh, pack-windows.ps1 / pack-windows.sh, and attach.sh.
-Does not print tokens. Does not wipe extra files already in --out (pgpass etc.).
+Used only by the no-argument pack scripts. Packages are written to deploy/dist.
 """
 
 from __future__ import annotations
 
-import argparse
+import json
+import hashlib
+import tempfile
+import tarfile
 import os
 import shutil
 import stat
@@ -25,28 +27,13 @@ MODULES = (
     ("postgres-mcp-server", "postgres-mcp-server", ["."]),
     ("mysql-mcp-server", "mysql-mcp-server", ["."]),
     ("host-logs-mcp-server", "host-logs-mcp-server", ["."]),
+    ("kafka-mcp-server", "kafka-mcp-server", ["."]),
 )
 
-PACK_TXT = """DevOpsMCP stdio binaries (read-only Nightingale / Jenkins / PostgreSQL / MySQL / host logs)
-
-This folder is a build output. Put it anywhere; do not commit it.
-
-1. Copy examples/mcp.json.example
-2. Change each command to the absolute path of the binary in THIS folder
-   (Windows: the .exe files). Fill tokens in your local client config only.
-3. PostgreSQL: copy examples/postgres-targets.example.json, remove any password
-   field, point PG_TARGETS_FILE at that file. Put the password in pgpass /
-   Credential Manager.
-4. MySQL: copy examples/mysql-targets.example.json, remove any password field,
-   point MYSQL_TARGETS_FILE at that file. Put the password in mysqlpass /
-   Credential Manager.
-5. Host logs: copy examples/host-logs-targets.example.json, fill host/user/
-   password or private_key, and paths in your private local copy; set HOST_LOGS_TARGETS_FILE.
-   No separate key file is needed. Existing SSH key configurations still work.
-
-Same-host URLs for a Docker hub: host.docker.internal, not 127.0.0.1.
-
-YLune attach (Linux host + Docker hub) is deploy/attach.sh, not this zip.
+PACK_TXT = """Six read-only stdio MCP servers: Nightingale, Jenkins, PostgreSQL, MySQL, host logs, Kafka.
+Configure your MCP client using examples/mcp.json.example. Replace absolute paths.
+Fill connection details in private local files. Kafka uses KAFKA_TARGETS_FILE.
+This package does not install, mount, register or start services.
 """
 
 
@@ -103,12 +90,14 @@ cd /src/jenkins-mcp-server && go build -o /out/{jenkins} .
 cd /src/postgres-mcp-server && go build -o /out/{pg} .
 cd /src/mysql-mcp-server && go build -o /out/{mysql} .
 cd /src/host-logs-mcp-server && go build -o /out/{hostlogs} .
+cd /src/kafka-mcp-server && go build -o /out/{kafka} .
 """.format(
         n9e=binary_name("n9e-mcp-server", goos),
         jenkins=binary_name("jenkins-mcp-server", goos),
         pg=binary_name("postgres-mcp-server", goos),
         mysql=binary_name("mysql-mcp-server", goos),
         hostlogs=binary_name("host-logs-mcp-server", goos),
+        kafka=binary_name("kafka-mcp-server", goos),
     )
     cmd = [
         "docker",
@@ -137,7 +126,7 @@ cd /src/host-logs-mcp-server && go build -o /out/{hostlogs} .
     print(f"built via {image} -> {out}", file=sys.stderr)
 
 
-def copy_examples(out: Path) -> None:
+def copy_examples(out: Path, goos: str) -> None:
     dest = out / "examples"
     dest.mkdir(parents=True, exist_ok=True)
     files = [
@@ -152,10 +141,35 @@ def copy_examples(out: Path) -> None:
     for src in files:
         if src.is_file():
             shutil.copy2(src, dest / src.name)
+    kafka_examples = REPO / "kafka-mcp-server" / "examples"
+    for name in ("targets.dev.json", "targets.tls-scram.json", "tool-calls.json"):
+        shutil.copy2(kafka_examples / name, dest / ("kafka-" + name))
+    config_path = dest / "mcp.json.example"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["mcpServers"]["kafka"] = {
+        "type": "stdio", "command": "/absolute/path/kafka-mcp-server", "args": [],
+        "env": {"KAFKA_TARGETS_FILE": "/absolute/path/kafka-targets.json", "KAFKA_MCP_READ_ONLY": "true"}}
+    toml = ["# Replace executable paths and private connection settings before use.\n"]
+    for service, settings in config["mcpServers"].items():
+        stem = "n9e-mcp-server" if service == "nightingale" else service + "-mcp-server"
+        settings["command"] = "/absolute/path/" + binary_name(stem, goos)
+        toml += [f"\n[mcp_servers.{service}]", "command = " + json.dumps(settings["command"]),
+                 "args = " + json.dumps(settings.get("args", [])), f"[mcp_servers.{service}.env]"]
+        toml += [key + " = " + json.dumps(value, ensure_ascii=False) for key, value in settings.get("env", {}).items()]
+    config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (dest / "codex.toml.example").write_text("\n".join(toml) + "\n", encoding="utf-8")
+    for module, _, _ in MODULES:
+        docs = out / "docs" / module
+        docs.mkdir(parents=True)
+        for name in ("README.md", "LICENSE", "NOTICE", "VALIDATION.md"):
+            src = REPO / module / name
+            if src.is_file():
+                shutil.copy2(src, docs / name)
+        licenses = REPO / module / "licenses"
+        if licenses.is_dir():
+            shutil.copytree(licenses, docs / "licenses")
     for name in ("LICENSE", "NOTICE"):
         shutil.copy2(REPO / name, out / name)
-    license_source = REPO / "host-logs-mcp-server" / "licenses"
-    shutil.copytree(license_source, out / "host-logs-mcp-server" / "licenses", dirs_exist_ok=True)
     (out / "PACK.txt").write_text(PACK_TXT, encoding="utf-8")
 
 
@@ -168,9 +182,9 @@ def chmod_bins(out: Path, goos: str) -> None:
             path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def compile(out: Path, goos: str, goarch: str, bins_only: bool, force_docker: bool) -> None:
+def compile(out: Path, goos: str, goarch: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
-    use_docker = force_docker or not have_go()
+    use_docker = not have_go()
     if use_docker:
         if not have_docker():
             raise SystemExit("need Go 1.26+ or Docker to compile")
@@ -178,19 +192,34 @@ def compile(out: Path, goos: str, goarch: str, bins_only: bool, force_docker: bo
     else:
         compile_native(out, goos, goarch)
     chmod_bins(out, goos)
-    if not bins_only:
-        copy_examples(out)
+    copy_examples(out, goos)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Compile DevOpsMCP binaries")
-    parser.add_argument("--os", dest="goos", default="linux", choices=("linux", "windows", "darwin"))
-    parser.add_argument("--arch", dest="goarch", default="amd64")
-    parser.add_argument("--out", required=True, help="output directory (created, not wiped)")
-    parser.add_argument("--bins-only", action="store_true", help="do not copy examples/PACK.txt")
-    parser.add_argument("--docker", action="store_true", help="force golang image even if Go is installed")
-    args = parser.parse_args()
-    compile(Path(args.out).expanduser().resolve(), args.goos, args.goarch, args.bins_only, args.docker)
+    if len(sys.argv) != 2 or sys.argv[1] not in ("linux", "windows"):
+        raise SystemExit("Use pack-linux.sh or pack-windows.cmd / .ps1 / .sh without arguments")
+    goos = sys.argv[1]
+    dist = HERE / "dist"
+    dist.mkdir(exist_ok=True)
+    name = f"devopsmcp-{goos}-amd64"
+    # Fresh staging prevents credentials or stale files in an old output entering the archive.
+    with tempfile.TemporaryDirectory(prefix=".pack-", dir=dist) as temporary:
+        out = Path(temporary) / name
+        compile(out, goos, "amd64")
+        hashes = {binary_name(stem, goos): hashlib.sha256((out / binary_name(stem, goos)).read_bytes()).hexdigest()
+                  for _, stem, _ in MODULES}
+        (out / "SHA256SUMS").write_text("".join(f"{digest}  {name}\n" for name, digest in hashes.items()), encoding="utf-8")
+        if goos == "linux":
+            archive = Path(temporary) / (name + ".tar.gz")
+            def permissions(info):
+                info.mode = 0o755 if info.isdir() or info.name in {name + "/" + stem for _, stem, _ in MODULES} else 0o644
+                return info
+            with tarfile.open(archive, "w:gz") as bundle:
+                bundle.add(out, arcname=name, filter=permissions)
+        else:
+            archive = Path(shutil.make_archive(str(Path(temporary) / name), "zip", root_dir=temporary, base_dir=name))
+        os.replace(archive, dist / archive.name)
+        print(f"Package: {dist / archive.name}")
     return 0
 
 
