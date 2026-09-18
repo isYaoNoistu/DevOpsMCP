@@ -280,3 +280,7 @@ The repo is [Apache License 2.0](LICENSE). `jenkins-mcp-server` keeps upstream [
 ## Codex setup and multiple environments
 
 See the [Codex setup guide (Chinese)](CODEX.md) for installation, TOML fields, credentials, UAT/PROD instances, target registries, and verification. Each service README includes its own TOML block. Copy [single-environment](examples/codex.toml.example) or [multi-environment](examples/codex.multi-env.toml.example) settings as needed.
+
+## Kafka MCP (production trial candidate)
+
+The independent Kafka module provides 10 read-only tools for local targets, allowlisted topic/group discovery, capabilities, configuration, group commits with explicit topic scope, offsets and bounded record samples. Trial builds include version, Git revision/dirty marker, build time, SHA-256 and a build manifest; the module is separate from the existing five-service packaging. Code remains in this repository with no cicd migration. See the [Kafka README](kafka-mcp-server/README.md) and [Kafka Skill](.cursor/skills/kafka/SKILL.md). Successful offline tests and packaging do not establish production acceptance.

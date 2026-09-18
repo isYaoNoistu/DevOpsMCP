@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"sort"
 
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
@@ -78,20 +79,7 @@ func New(t targets.Target) (*Client, error) {
 }
 func (c *Client) Close() { c.kafka.Close() }
 func safeError(e error) string {
-	if e == nil {
-		return "ok"
-	}
-	if errors.Is(e, context.DeadlineExceeded) {
-		return "timeout"
-	}
-	if errors.Is(e, context.Canceled) {
-		return "cancelled"
-	}
-	var ke *kerr.Error
-	if errors.As(e, &ke) {
-		return ke.Message
-	}
-	return "kafka_request_failed"
+	return ErrorDetails(e)["error_code"].(string)
 }
 func status(code int16) string { return safeError(kerr.ErrorForCode(code)) }
 func (c *Client) Capabilities(ctx context.Context) (any, error) {
@@ -177,6 +165,9 @@ func (c *Client) Configs(ctx context.Context, typ string, names, keys []string, 
 	}
 	req := kmsg.NewPtrDescribeConfigsRequest()
 	req.IncludeSynonyms = syn
+	if len(keys) == 0 {
+		keys = nil
+	}
 	for _, n := range names {
 		if rt == 4 {
 			id, e := strconv.ParseInt(n, 10, 32)
@@ -194,7 +185,17 @@ func (c *Client) Configs(ctx context.Context, typ string, names, keys []string, 
 	truncated := false
 	for _, sh := range c.kafka.RequestSharded(ctx, req) {
 		if sh.Err != nil {
-			rows = append(rows, map[string]any{"status": safeError(sh.Err)})
+			if failed, ok := sh.Req.(*kmsg.DescribeConfigsRequest); ok {
+				for _, resource := range failed.Resources {
+					row := ErrorDetails(sh.Err)
+					row["status"], row["resource_type"], row["name"], row["broker_id"] = safeError(sh.Err), typ, resource.ResourceName, sh.Meta.NodeID
+					rows = append(rows, row)
+				}
+			} else {
+				row := ErrorDetails(sh.Err)
+				row["status"], row["broker_id"] = safeError(sh.Err), sh.Meta.NodeID
+				rows = append(rows, row)
+			}
 			continue
 		}
 		for _, r := range sh.Resp.(*kmsg.DescribeConfigsResponse).Resources {
@@ -217,7 +218,10 @@ func (c *Client) Configs(ctx context.Context, typ string, names, keys []string, 
 				}
 				configs = append(configs, configView(v, syn))
 			}
-			rows = append(rows, map[string]any{"name": r.ResourceName, "status": status(r.ErrorCode), "configs": configs})
+			row := ErrorDetails(kerr.ErrorForCode(r.ErrorCode))
+			row["name"], row["resource_type"], row["broker_id"] = r.ResourceName, typ, sh.Meta.NodeID
+			row["status"], row["configs"], row["kafka_error_code"] = status(r.ErrorCode), configs, r.ErrorCode
+			rows = append(rows, row)
 		}
 	}
 	return map[string]any{"resources": rows, "truncated": truncated}, nil
@@ -385,9 +389,17 @@ func (c *Client) describeGroup(ctx context.Context, group string) (groupDetail, 
 	return out, nil
 }
 
-func (c *Client) Group(ctx context.Context, group string) (any, error) {
+func (c *Client) Group(ctx context.Context, group string, requestedTopics []string) (any, error) {
 	if !c.target.AllowsGroup(group) {
 		return nil, errors.New("group not allowed")
+	}
+	if len(requestedTopics) > 20 {
+		return nil, errors.New("too many topics")
+	}
+	for _, topic := range requestedTopics {
+		if topic == "" || strings.ContainsAny(topic, "*?[") || !c.target.AllowsTopic(topic) {
+			return nil, errors.New("invalid topic or topic not allowed")
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
@@ -427,6 +439,12 @@ func (c *Client) Group(ctx context.Context, group string) (any, error) {
 		members = append(members, map[string]any{"member_id": m.MemberID, "client_id": m.ClientID, "client_host": m.ClientHost, "assignments": assignments})
 	}
 	names := []string{}
+	if len(requestedTopics) > 0 {
+		topics = map[string]bool{}
+		for _, topic := range requestedTopics {
+			topics[topic] = true
+		}
+	}
 	for t := range topics {
 		if len(names) >= 100 {
 			truncated = true
@@ -434,10 +452,15 @@ func (c *Client) Group(ctx context.Context, group string) (any, error) {
 		}
 		names = append(names, t)
 	}
+	sort.Strings(names)
 	offsets := []any{}
 	offsetStatus := "not_queried_no_explicit_topics"
 	if len(names) > 0 {
 		os, e := c.fetchScopedOffsets(ctx, group, names)
+		var scope *ScopeLimitError
+		if errors.As(e, &scope) {
+			return nil, e
+		}
 		offsetStatus = safeError(e)
 		for topic, ps := range os {
 			if !c.target.AllowsTopic(topic) {
@@ -448,11 +471,21 @@ func (c *Client) Group(ctx context.Context, group string) (any, error) {
 					truncated = true
 					break
 				}
-				offsets = append(offsets, map[string]any{"topic": topic, "partition": p, "committed_offset": v.At, "status": safeError(v.Err)})
+				commitStatus := "available"
+				if v.Err != nil {
+					commitStatus = "query_failed"
+				} else if v.At < 0 {
+					commitStatus = "no_committed_offset"
+				}
+				offsets = append(offsets, map[string]any{"topic": topic, "partition": p, "committed_offset": v.At, "status": safeError(v.Err), "commit_status": commitStatus})
 			}
 		}
 	}
-	return map[string]any{"group": group, "group_type": g.GroupType, "status": safeError(g.Err), "state": g.State, "protocol_type": g.ProtocolType, "protocol": g.Protocol, "members": members, "committed_offsets": offsets, "offsets_status": offsetStatus, "offset_scope": "allowed exact topics and observed allowed member assignments", "incomplete_reason": "wildcard-only inactive topic offsets are not enumerated", "application_position_available": false, "truncated": truncated}, nil
+	offsetScope, incompleteReason := "allowed exact topics and observed allowed member assignments", "wildcard-only inactive topic offsets are not enumerated"
+	if len(requestedTopics) > 0 {
+		offsetScope, incompleteReason = "explicit requested topics", ""
+	}
+	return map[string]any{"group": group, "group_type": g.GroupType, "status": safeError(g.Err), "state": g.State, "protocol_type": g.ProtocolType, "protocol": g.Protocol, "members": members, "committed_offsets": offsets, "offsets_status": offsetStatus, "offset_scope": offsetScope, "offset_topics": names, "incomplete_reason": incompleteReason, "application_position_available": false, "truncated": truncated}, nil
 }
 func recordView(r *kgo.Record, payload bool, budget int) (map[string]any, int, bool) {
 	v := map[string]any{"topic": r.Topic, "partition": r.Partition, "offset": r.Offset, "timestamp_ms": r.Timestamp.UnixMilli(), "key_bytes": len(r.Key), "value_bytes": len(r.Value), "header_count": len(r.Headers)}
@@ -578,6 +611,10 @@ func (c *Client) Peek(ctx context.Context, topic string, p int32, offset int64, 
 // FetchOffsetsForTopics in kadm fetches all group offsets then filters locally.
 // Use explicit partitions on the wire instead.
 func (c *Client) fetchScopedOffsets(ctx context.Context, group string, names []string) (kadm.OffsetResponses, error) {
+	requested := make(map[string]bool, len(names))
+	for _, name := range names {
+		requested[name] = true
+	}
 	md := kmsg.NewPtrMetadataRequest()
 	md.AllowAutoTopicCreation = false
 	for _, name := range names {
@@ -594,7 +631,7 @@ func (c *Client) fetchScopedOffsets(ctx context.Context, group string, names []s
 	count := 0
 	out := kadm.OffsetResponses{}
 	for _, t := range mr.Topics {
-		if t.Topic == nil || !c.target.AllowsTopic(*t.Topic) {
+		if t.Topic == nil || !requested[*t.Topic] || !c.target.AllowsTopic(*t.Topic) {
 			continue
 		}
 		if t.ErrorCode != 0 {
@@ -605,7 +642,7 @@ func (c *Client) fetchScopedOffsets(ctx context.Context, group string, names []s
 		for _, p := range t.Partitions {
 			count++
 			if count > 500 {
-				return nil, errors.New("partition scope exceeds limit")
+				return nil, &ScopeLimitError{}
 			}
 			rt.Partitions = append(rt.Partitions, p.Partition)
 		}
@@ -622,7 +659,7 @@ func (c *Client) fetchScopedOffsets(ctx context.Context, group string, names []s
 		return nil, kerr.ErrorForCode(r.ErrorCode)
 	}
 	add := func(topic string, p int32, offset int64, code int16) {
-		if !c.target.AllowsTopic(topic) {
+		if !requested[topic] || !c.target.AllowsTopic(topic) {
 			return
 		}
 		if out[topic] == nil {

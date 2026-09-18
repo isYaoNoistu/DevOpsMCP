@@ -1,6 +1,8 @@
-# Kafka MCP V1
+# Kafka MCP 0.2.0-trial
 
-独立 Go stdio MCP，提供 8 个只读 Kafka 诊断工具。源码、示例和技能均在 DevOpsMCP；本模块不迁移到 cicd，不修改正在使用的 MCP 配置。没有生产消息、提交/重置 offset、创建/删除 topic、修改配置或 ACL 的工具。
+本次验证结果及尚未覆盖的生产条件见 [验收记录](VALIDATION.md)。
+
+独立 Go stdio MCP，提供 10 个只读 Kafka 诊断工具。源码、示例和技能均在 DevOpsMCP；本模块不迁移到 cicd，不修改正在使用的 MCP 配置。没有生产消息、提交/重置 offset、创建/删除 topic、修改配置或 ACL 的工具。当前为生产试用候选版本，发布包不代表已通过生产验收。
 
 ## 构建与离线验收
 
@@ -13,9 +15,25 @@ go vet ./...
 py -3 ./scripts/smoke.py
 ```
 
-构建脚本从模块路径推导仓库外输出目录，本工作区为 `D:/project/CICD/dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe`，关闭 CGO 并附带许可证，只构建当前模块，不清理其他产物。smoke 使用临时的 localhost 配置，执行 MCP initialize、tools/list 和 list_targets；不会连接 Kafka。离线成功只说明本地加载和 stdio 协议可用。
+构建脚本从模块路径推导仓库外输出目录，本工作区为 `D:/project/CICD/dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe`，关闭 CGO，只构建当前模块，不清理其他产物。先构建独立临时文件，再替换默认路径，不生成 `.exe~` 备份；默认文件被客户端占用时保留原文件并输出带版本名的新文件，不终止现有进程。此时 smoke 使用 `--binary <新文件路径>` 指定新产物。
 
-自动化测试使用 kfake 协议模拟服务，覆盖不自动建 Topic、不加入消费组、不提交 offset、保留部分查询结果，以及实际模拟事务提交/回滚后 `read_committed` 排除回滚消息。它不等于真实 Kafka 验收。当前环境 Docker daemon 不可用，尚无真实 Kafka 集群运行验收；认证、ACL、TLS、事务隔离和实际 broker 兼容性仍需在获准环境验证。
+`--version` 输出版本、Git 短 revision（工作区有修改时附 `-dirty`）和 UTC 构建时间。随包包含可核对的 `<二进制文件名>.sha256`、`build-info.json`（二进制哈希、完整 commit、dirty 标记、模块源文件哈希、Go/平台及构建参数）、`kafka-mcp-licenses/` 和 `kafka-mcp-docs/`。文档包保留模块 README、公开示例和 Kafka Skill；不会复制私有 target 或凭据。dirty 构建需结合源文件哈希识别实际内容，commit 本身不足以复现未提交修改。
+
+smoke 使用临时 localhost 配置，执行 `--version`、MCP initialize、tools/list（10 个只读工具）和 list_targets；不会连接 Kafka。离线成功只说明本地加载和 stdio 协议可用。
+
+自动化测试使用 kfake 协议模拟服务，覆盖不自动建 Topic、不加入消费组、不提交 offset、保留部分查询结果，以及模拟事务提交/回滚后 `read_committed` 排除回滚消息。它不等于真实 Kafka 验收。试用前需在明确获准的目标上验证工具调用，并在 metadata-only peek 前后核对专用消费组提交位置不变；认证、ACL、TLS、事务隔离、活跃消费组及实际 broker 兼容性需分别记录证据。没有相应记录时不能声称这些能力已完成真实环境验收。
+
+明确获准后，可对已存在的专用测试对象运行只读验收。以下名称均为示例，私有 target 文件必须已映射到获准环境；消费组在整个验收期间必须空闲，topic 必须有可读的已提交记录，配置测试 topic 的 retention.ms 必须等于指定期望值。脚本不会创建测试对象、生产消息、提交 offset 或修改配置：
+
+```powershell
+py -3 ./scripts/acceptance.py `
+  --binary D:/project/CICD/dist/devopsmcp-dev-windows-amd64/kafka-mcp-server.exe `
+  --targets D:/project/CICD/.codex/kafka-targets.json `
+  --target local-uat --topic mcp-events --group mcp-lag-group `
+  --config-topic mcp-config-test --expected-retention-ms 21600000
+```
+
+它核对列表和翻页、配置查询的省略/空 config_keys 结果相同、显式 topic 范围的提交位置，以及 metadata-only peek 前后专用组 offset 不变。另查询随机生成的 `mcp-missing-readonly-*` 不存在 Topic，验证错误和禁止自动创建；测试白名单须允许该前缀。成功只覆盖本次目标和对象，不包含独立 Kafka CLI 对照或活跃消费组验收。分发包的 `kafka-mcp-docs/kafka-mcp-server/scripts/` 附带 smoke.py 和 acceptance.py；在包内运行 smoke 时须显式给出 `--binary`，构建和 Go 测试命令则在源码模块目录运行。
 
 ## 本地 target 文件
 
@@ -59,15 +77,23 @@ KAFKA_TARGETS_FILE 必填；KAFKA_MCP_READ_ONLY 缺省即 true，设置其他值
 | list_targets | 可选 query，按名称或描述筛选本地 target；不连接 broker |
 | get_target_info | target；检查本地白名单和 payload 策略 |
 | kafka_capabilities | target；查询集群元数据和协议能力；支持某 API 不代表有调用权限 |
+| kafka_topics_list | target；可选 query、after、limit（默认 50，最多 200）、include_internal（默认 false）；只返回白名单内 topic |
+| kafka_groups_list | target；可选 query、after、limit（默认 50，最多 200）；只返回白名单内消费组 |
 | kafka_configs_query | target、resource_type（topic/broker）、resource_names（1–10 个精确名称）；broker 用数字节点 ID；可选 config_keys（最多 30）和 include_synonyms；返回配置来源，隐藏敏感值 |
 | kafka_topic_inspect | target、topic；指定 topic 的 leader、replicas、ISR；不自动创建 topic |
-| kafka_group_inspect | target、group；成员、分区分配和已提交 offset；不暴露应用处理位置、线程栈或业务代码 |
+| kafka_group_inspect | target、group；可选 topics（最多 20 个白名单内精确 topic）；成员、分区分配和已提交 offset；不暴露应用处理位置、线程栈或业务代码 |
 | kafka_offsets_query | target、topic、partition；查询 earliest、high watermark、last stable offset；可选 timestamp_ms |
 | kafka_records_peek | target、topic、partition；start_offset 或 timestamp_ms 二选一；有界手动分区采样，不加入消费组、不提交 offset |
 
 工具参数示例见 [tool-calls.json](examples/tool-calls.json)。所有时间戳参数为 **Unix 毫秒**，不是秒。HW 是 high watermark，LSO 是 last stable offset；二者都不能称为 LEO（leader 本地日志末端）。offset 差值也不是精确消息条数：压缩、删除、事务与记录空洞会影响解释。committed offset 表示消费组提交边界，不等于此刻应用已经处理的位置。
 
-peek 默认 max_records=5（上限 20）、max_bytes=16384（上限 65536）、isolation_level=read_committed；可显式选择 read_uncommitted。max_bytes 限制序列化后的记录 JSON 总字节数（包含元数据和已启用的 payload），不是 Kafka 网络流量上限。单条原始 key/headers/value 合计超过 16384 字节时省略内容；启用的内容以 base64 返回。默认只看元数据，隐藏 key/headers/value；空采样不能证明 topic 无数据。每次 broker 工具调用有 20 秒整体超时，响应超过 256 KiB 会返回 response_too_large，需缩小查询。
+列表先按白名单过滤，再按名称排序、query 筛选和分页；query 为区分大小写的名称子串，最多 256 UTF-8 字节。`after` 为上一页最后一个名称（返回的 next_after），采用严格大于该名称的排他游标。每次调用重新发现，是非原子的新快照，资源变化会影响后续页；这不是 broker 端分页。limit 只限制返回条目，发现仍需请求全 topic 元数据或多个 broker 的组列表，不能据此推断网络流量或内存上限。消费组发现最多扫描元数据中的 100 个 broker，最多 4 路并发，单 broker 最多 3 秒、发现整体最多 12 秒；超出扫描范围会标记 partial/truncated。单个 broker 响应读取上限为 8 MiB，超过时会失败或标记部分发现；部分结果、截断和错误不等于全量清单。include_internal 只影响 topic 列表，仍受白名单限制。
+
+group 的 topics 省略时由当前分配或精确 topic 白名单推断 offset 查询范围；显式提供时覆盖这个隐式范围，不自动扩展到其他 topic。它不是完整历史订阅查询。存在分区但没有已提交位置时保留 `committed_offset: -1`，并返回 `commit_status: no_committed_offset`；不能按 offset 0 或 lag 0 解读，也不会自动推导 lag。分区范围超限时应缩小 topics。
+
+peek 默认 max_records=5（上限 20）、max_bytes=16384（上限 65536）、isolation_level=read_committed；可显式选择 read_uncommitted。max_bytes 限制序列化后的记录 JSON 总字节数（包含元数据和已启用的 payload），不是 Kafka 网络流量或进程内存上限。即使 include_value=false，Kafka Fetch 仍会将原始记录传入本地 MCP 进程；此开关只控制工具输出中的 key/headers/value。单条原始 key/headers/value 合计超过 16384 字节时省略内容；启用的内容以 base64 返回。base64 可逆，不是脱敏或加密。默认不输出 payload；空采样不能证明 topic 无数据。
+
+每次 broker 工具调用有 20 秒整体超时，同一 MCP 进程对同一 target 最多同时执行 2 个 broker 操作，超额立即返回 busy，不排队；不同 MCP 进程不共享此限制。响应超过 256 KiB 会返回 response_too_large，需缩小查询。这些输出预算不能保证总网络流量或进程内存的数值上限。
 
 响应包含 target、operation、sampled_at（UTC）、scope、status、truncated 和 data。读取 data 中的分区/资源错误以及截断信息，不能只看外层 status。权限不足、超时、目标不可用与不支持 API 都不是业务系统正常的证据。诊断按“证据 → 字段含义 → 分析”组织：先用现有夜莺指标确认时间窗，再定位 group/topic/config/offset，最后关联获准的主机和应用日志。
 

@@ -57,7 +57,7 @@ func TestRegisteredToolsOverMCP(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(listed.Tools) != 8 {
+	if len(listed.Tools) != 10 {
 		t.Fatalf("tools=%d", len(listed.Tools))
 	}
 	for _, tool := range listed.Tools {

@@ -7,6 +7,7 @@ from pathlib import Path
 import queue
 import subprocess
 import threading
+import time
 import uuid
 
 
@@ -30,7 +31,11 @@ def main():
     args = parser.parse_args()
     expected = {"list_targets", "get_target_info", "kafka_capabilities",
                 "kafka_configs_query", "kafka_topic_inspect", "kafka_group_inspect",
-                "kafka_offsets_query", "kafka_records_peek"}
+                "kafka_offsets_query", "kafka_records_peek",
+                "kafka_topics_list", "kafka_groups_list"}
+    version = subprocess.run([str(args.binary.resolve()), "--version"],
+        check=True, capture_output=True, text=True, encoding="utf-8", timeout=10).stdout.strip()
+    assert version, "--version returned no build identity"
     # Keep the temporary fixture beside the selected build, outside the repository.
     with fixture_path(args.binary.resolve().parent) as targets:
         targets.write_text(json.dumps({"targets": [{"name": "offline-fixture",
@@ -53,11 +58,18 @@ def main():
             proc.stdin.flush()
             if identifier is None:
                 return None
-            # This fixture expects one response per request and no progress notifications.
-            line = lines.get(timeout=10)
-            if line is None:
-                raise RuntimeError("server exited before response")
-            response = json.loads(line)
+            deadline = time.monotonic()+10
+            while True:
+                remaining = deadline-time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("MCP response timeout")
+                line = lines.get(timeout=remaining)
+                if line is None:
+                    raise RuntimeError("server exited before response")
+                response = json.loads(line)
+                if "id" not in response and response.get("method", "").startswith("notifications/"):
+                    continue
+                break
             if response.get("id") != identifier or "error" in response:
                 raise RuntimeError("unexpected JSON-RPC response")
             return response["result"]
@@ -75,7 +87,7 @@ def main():
             assert envelope["status"] == "ok"
             assert [target["name"] for target in envelope["data"]] == ["offline-fixture"]
             assert envelope["data"][0]["allow_payload"] is False
-            print("PASS: initialize, 8 read-only tools, local list_targets; no Kafka queried")
+            print("PASS: --version, initialize, 10 read-only tools, local list_targets; no Kafka queried")
         finally:
             proc.stdin.close()
             try:

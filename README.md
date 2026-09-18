@@ -292,6 +292,6 @@ cd ../host-logs-mcp-server && go test ./...
 
 五个服务的添加步骤、TOML 配置、凭据和 UAT / PROD 多环境方案见 [Codex 接入与多环境配置](CODEX.md)。每个服务 README 都提供可复制的独立配置。
 
-## Kafka MCP V1（开发中）
+## Kafka MCP（生产试用候选）
 
-新增独立只读 Kafka 排障模块，提供目标发现、协议能力、配置、Topic、消费组、位点与受限消息抽样。开发代码仅在本仓库，未迁移到 cicd；构建及 Codex 接入见 [Kafka MCP README](kafka-mcp-server/README.md)，使用流程见 [Kafka Skill](.cursor/skills/kafka/SKILL.md)。
+独立 Kafka 模块提供 10 个只读工具，覆盖目标及白名单内 Topic/消费组发现、协议能力、配置、显式 topic 范围的消费组提交位置、位点和受限消息采样。生产试用构建附带版本、Git revision/dirty 标记、时间戳、SHA-256 和构建清单；不在现有五服务正式打包流程中。开发代码仅在本仓库，未迁移到 cicd；构建及接入见 [Kafka MCP README](kafka-mcp-server/README.md)，使用流程见 [Kafka Skill](.cursor/skills/kafka/SKILL.md)。离线测试和打包成功不代表生产环境验收完成。

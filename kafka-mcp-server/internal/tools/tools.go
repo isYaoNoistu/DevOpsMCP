@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/twmb/franz-go/pkg/kerr"
+	"kafka-mcp-server/internal/broker"
 	"kafka-mcp-server/internal/targets"
 )
 
@@ -19,13 +20,16 @@ type Backend interface {
 	Capabilities(context.Context) (any, error)
 	Configs(context.Context, string, []string, []string, bool) (any, error)
 	Topic(context.Context, string) (any, error)
-	Group(context.Context, string) (any, error)
+	Group(context.Context, string, []string) (any, error)
+	ListTopics(context.Context, string, string, int, bool) (any, error)
+	ListGroups(context.Context, string, string, int) (any, error)
 	Offsets(context.Context, string, int32, *int64) (any, error)
 	Peek(context.Context, string, int32, int64, *int64, int, int, bool, string) (any, error)
 }
 type Deps struct {
 	Reg     *targets.Registry
 	Factory func(targets.Target) (Backend, error)
+	Budget  *Budget
 }
 type TargetInput struct {
 	Target string `json:"target" jsonschema:"Exact target name from list_targets."`
@@ -38,8 +42,9 @@ type TopicInput struct {
 	Topic  string `json:"topic"`
 }
 type GroupInput struct {
-	Target string `json:"target"`
-	Group  string `json:"group"`
+	Target string   `json:"target"`
+	Group  string   `json:"group"`
+	Topics []string `json:"topics,omitempty" jsonschema:"Optional 1 to 20 exact allowed topics for committed offsets. Overrides inferred offset topic scope, including for empty groups. Omitted or empty uses inferred scope."`
 }
 type ConfigInput struct {
 	Target          string   `json:"target"`
@@ -66,7 +71,7 @@ type PeekInput struct {
 	IsolationLevel string `json:"isolation_level,omitempty" jsonschema:"read_committed (default) or read_uncommitted."`
 }
 
-func reply(target, operation string, scope, data any, code string) (*mcp.CallToolResult, any, error) {
+func reply(target, operation string, scope, data any, code string, details ...map[string]any) (*mcp.CallToolResult, any, error) {
 	v := map[string]any{"target": target, "operation": operation, "sampled_at": time.Now().UTC().Format(time.RFC3339Nano), "scope": scope, "data": data, "status": "ok", "truncated": false}
 	good, bad, cut := resultState(data)
 	v["truncated"] = cut
@@ -80,6 +85,13 @@ func reply(target, operation string, scope, data any, code string) (*mcp.CallToo
 	if code != "" {
 		v["status"] = code
 		v["data"] = nil
+	}
+	if len(details) > 0 {
+		v["error"] = details[0]
+	}
+	if code == "busy" {
+		v["error"] = map[string]any{"error_code": "busy", "category": "capacity", "stage": "admission", "retryable": true}
+		v["next_step"] = "Retry after an active query finishes; do not immediately fan out retries."
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -103,7 +115,7 @@ func resultState(data any) (good, bad int, truncated bool) {
 		for k, x := range v {
 			if s, ok := x.(string); ok && (k == "status" || strings.HasSuffix(k, "_status")) {
 				switch s {
-				case "ok", "at_end", "timestamp_not_found", "not_visible_yet", "no_committed_data_visible":
+				case "ok", "available", "no_committed_offset", "at_end", "timestamp_not_found", "not_visible_yet", "no_committed_data_visible":
 					good++
 				default:
 					bad++
@@ -134,6 +146,10 @@ func invalid(target, op string) (*mcp.CallToolResult, any, error) {
 	return reply(target, op, nil, nil, "invalid_arguments")
 }
 func classify(err error) string {
+	var scope *broker.ScopeLimitError
+	if errors.As(err, &scope) {
+		return "scope_limit_exceeded"
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout"
 	}
@@ -159,6 +175,9 @@ func classify(err error) string {
 	return "connection_or_query_failed"
 }
 func (d Deps) invoke(ctx context.Context, target, op string, scope any, gate func(targets.Target) bool, fn func(context.Context, Backend) (any, error)) (*mcp.CallToolResult, any, error) {
+	if ctx.Err() != nil {
+		return reply(target, op, scope, nil, classify(ctx.Err()))
+	}
 	t, err := d.Reg.Resolve(target)
 	if err != nil {
 		return reply(target, op, scope, nil, "target_unavailable")
@@ -168,14 +187,25 @@ func (d Deps) invoke(ctx context.Context, target, op string, scope any, gate fun
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	budget := d.Budget
+	if budget == nil {
+		budget = processBudget
+	}
+	if !budget.acquire(target) {
+		return reply(target, op, scope, nil, "busy")
+	}
+	defer budget.release(target)
+	if ctx.Err() != nil {
+		return reply(target, op, scope, nil, classify(ctx.Err()))
+	}
 	cl, err := d.Factory(t)
 	if err != nil {
-		return reply(target, op, scope, nil, "client_configuration_error")
+		return reply(target, op, scope, nil, "client_configuration_error", broker.ErrorDetails(err))
 	}
 	defer cl.Close()
 	data, err := fn(ctx, cl)
 	if err != nil {
-		return reply(target, op, scope, nil, classify(err))
+		return reply(target, op, scope, nil, classify(err), broker.ErrorDetails(err))
 	}
 	return reply(target, op, scope, data, "")
 }
@@ -213,10 +243,25 @@ func (d Deps) Topic(ctx context.Context, _ *mcp.CallToolRequest, in TopicInput) 
 	return d.invoke(ctx, in.Target, "kafka_topic_inspect", in, func(t targets.Target) bool { return t.AllowsTopic(in.Topic) }, func(c context.Context, b Backend) (any, error) { return b.Topic(c, in.Topic) })
 }
 func (d Deps) Group(ctx context.Context, _ *mcp.CallToolRequest, in GroupInput) (*mcp.CallToolResult, any, error) {
-	if !targets.ValidGroupName(in.Group) {
+	if !targets.ValidGroupName(in.Group) || len(in.Topics) > 20 {
 		return invalid(in.Target, "kafka_group_inspect")
 	}
-	return d.invoke(ctx, in.Target, "kafka_group_inspect", in, func(t targets.Target) bool { return t.AllowsGroup(in.Group) }, func(c context.Context, b Backend) (any, error) { return b.Group(c, in.Group) })
+	for _, name := range in.Topics {
+		if !validTopic(name) {
+			return invalid(in.Target, "kafka_group_inspect")
+		}
+	}
+	return d.invoke(ctx, in.Target, "kafka_group_inspect", in, func(t targets.Target) bool {
+		if !t.AllowsGroup(in.Group) {
+			return false
+		}
+		for _, name := range in.Topics {
+			if !t.AllowsTopic(name) {
+				return false
+			}
+		}
+		return true
+	}, func(c context.Context, b Backend) (any, error) { return b.Group(c, in.Group, in.Topics) })
 }
 func (d Deps) Configs(ctx context.Context, _ *mcp.CallToolRequest, in ConfigInput) (*mcp.CallToolResult, any, error) {
 	if (in.ResourceType != "topic" && in.ResourceType != "broker") || len(in.ResourceNames) < 1 || len(in.ResourceNames) > 10 || len(in.ConfigKeys) > 30 {
@@ -288,6 +333,8 @@ func Register(s *mcp.Server, d Deps) {
 	}
 	mcp.AddTool(s, tool("list_targets", "List configured Kafka targets without credentials. Local only."), d.ListTargets)
 	mcp.AddTool(s, tool("get_target_info", "Local target metadata, allowlists and message sampling policy; no credentials."), d.GetTargetInfo)
+	mcp.AddTool(s, tool("kafka_topics_list", "Discover allowed topics with bounded output, substring filter and after-name cursor. Fresh snapshot; broker metadata scan is not paginated. No auto-create."), d.TopicsList)
+	mcp.AddTool(s, tool("kafka_groups_list", "Discover allowed groups across brokers, preserving partial failures. Bounded output and after-name cursor over fresh snapshots; no group joins."), d.GroupsList)
 	mcp.AddTool(s, tool("kafka_capabilities", "Read cluster metadata and broker protocol capabilities; support is not proof of authorization."), d.Capabilities)
 	mcp.AddTool(s, tool("kafka_configs_query", "Read effective topic/broker config with sources and optional synonyms. No changes; sensitive values hidden."), d.Configs)
 	mcp.AddTool(s, tool("kafka_topic_inspect", "Inspect one allowlisted topic's partition leaders, replica and ISR IDs. No auto-create."), d.Topic)

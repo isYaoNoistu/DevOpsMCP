@@ -75,7 +75,7 @@ func TestModernConsumerGroup(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer c.Close()
-			r, err := c.Group(context.Background(), "reader")
+			r, err := c.Group(context.Background(), "reader", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -226,7 +226,7 @@ func TestReadOnlyProtocolFixture(t *testing.T) {
 		t.Fatalf("out of range: %v %v", r, e)
 	}
 	c.target.Topics = []string{"orders"}
-	_, _ = c.Group(ctx, "consumer")
+	_, _ = c.Group(ctx, "consumer", nil)
 	mu.Lock()
 	defer mu.Unlock()
 	if len(forbidden) > 0 {

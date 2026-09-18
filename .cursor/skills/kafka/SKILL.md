@@ -5,16 +5,19 @@ description: 使用 Kafka MCP 只读工具检查指定 topic、消费组、配�
 
 # Kafka 只读排障
 
-先用 list_targets / get_target_info 确认明确 target 和 topic/group 白名单，不猜测集群映射。只有八个 V1 只读工具；参数和语义见 [工具参考](references/tools.md)。该目录是仓库技能源，存在并不表示已安装到当前工作区。
+先用 list_targets / get_target_info 确认明确 target 和 topic/group 白名单，不猜测集群映射。共有十个只读工具；参数和语义见 [工具参考](references/tools.md)。该目录是仓库技能源，存在并不表示已安装到当前工作区。
 
 对于积压或吞吐问题，先使用现有夜莺技能查看已有指标和时间窗；有明确对象问题时可直接查对应 Kafka 对象。不新增监控部署。然后按问题查看 group、topic、config 和分区 offset，再通过已有主机日志或应用日志工具补齐业务证据；调用其他产品工具前读取对应技能。
 
 按“证据 → 含义 → 分析”输出：列出 target、采样时间、group/topic/partition、字段和单位；解释观测边界；最后给出有依据的判断和仍缺的证据。不要把无权限、超时、截断或空结果写成健康结论。
 
 - committed offset 是提交边界，不是应用当前处理位置；无法据此推断业务函数、线程栈、是否成功落库。
+- 不知道对象名称时，使用 kafka_topics_list / kafka_groups_list 在白名单内发现；limit 默认 50、最多 200。after 是上一页末尾名称的排他游标，每页是新快照，不是 broker 端分页；部分错误、截断或空列表不能证明集群全貌。不要为绕过扫描失败而放宽白名单。
+- group 查询可显式传 topics（最多 20 个精确白名单名称）覆盖从分配或精确白名单推断的 offset 范围。没有提交的分区保持 committed_offset=-1、commit_status=no_committed_offset，不能报告 lag=0 或无积压。
 - earliest、HW（high watermark）、LSO（last stable offset）是不同边界；不能称 HW/LSO 为 LEO，不能把 offset 差直接当精确消息条数。timestamp_ms 使用 Unix 毫秒。
 - kafka_capabilities 的协议支持不证明 ACL 授权；配置值需要结合 source/synonyms 和敏感字段隐藏解释。
-- 默认仅采样元数据。只有用户明确要求读取消息内容，且本地 target.allow_payload 为 true，才使用 include_value:true；它同时暴露 key、headers、value，返回时也需避免回显敏感内容。不能为了完成查询而放宽白名单或修改本地 payload 策略。
+- 默认仅输出采样元数据；即使 include_value=false，Fetch 仍会将原始消息传入本地 MCP 进程。只有用户明确要求读取消息内容，且本地 target.allow_payload 为 true，才使用 include_value:true；它同时暴露 key、headers、value，base64 编码可逆，不是脱敏或加密。返回时避免回显敏感内容。不能为了完成查询而放宽白名单或修改本地 payload 策略。
+- 同一进程每个 target 最多 2 个并发 broker 操作，busy 表示额度已用完；等已有查询结束后再决定是否重试，不能紧循环重试。每次查询整体超时 20 秒，列表和 peek 的输出预算不保证网络流量或进程内存上限；检查资源/分区错误、retryability 和部分结果，再判断下一步。
 - 明确 topic 和 partition，选择 offset 或时间戳，维持小记录数/字节数。read_committed 的空样本不证明没有未提交记录或没有历史数据。
 - 不写消息、不创建/删除 topic、不修改 ACL/config、不重置或提交消费组 offset，也不将这些只读工具描述为完成了修复。
 
